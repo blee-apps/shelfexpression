@@ -446,7 +446,7 @@ export default function App() {
       >
         <div className="mb-6 md:mb-6">
           <h1 className="text-4xl md:text-5xl font-serif text-gray-900 mb-4">Bookshelf</h1>
-          <p className="text-lg text-gray-600">The 12 best books I&rsquo;ve read recently.</p>
+          <p className="text-lg text-gray-600">The {BOOKS.length} best books I&rsquo;ve read recently.</p>
         </div>
 
         <div className="flex-1 flex flex-col w-full relative py-4 md:py-6">
