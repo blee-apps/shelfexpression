@@ -117,6 +117,7 @@ const extractDominantColor = (url: string): Promise<string | null> => {
 };
 
 const fetchCover = async (book: Book): Promise<{ url: string | null; color: string | null }> => {
+  fetchingSet.add(book.id);
   try {
     let url: string | null = null;
 
@@ -136,7 +137,11 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
       url = url.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
     }
 
-    if (!url) return { url: null, color: null };
+    if (!url) {
+      fetchingSet.delete(book.id);
+      colorStore.notify();
+      return { url: null, color: null };
+    }
 
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
@@ -151,14 +156,16 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     if (color) {
       colorCache.set(book.id, color);
     }
+    fetchingSet.delete(book.id);
     colorStore.notify();
 
     return { url, color: colorCache.get(book.id)! };
   } catch {
+    fetchingSet.delete(book.id);
     if (!colorCache.has(book.id)) {
       colorCache.set(book.id, getColorForString(book.title));
-      colorStore.notify();
     }
+    colorStore.notify();
     return { url: null, color: colorCache.get(book.id)! };
   }
 };
@@ -198,6 +205,7 @@ const useBookCover = (book: Book) => {
     url: coverCache.get(book.id) || null,
     status: coverCache.has(book.id) ? 'loaded' : 'loading'
   }));
+  const cacheVersion = useSyncExternalStore(colorStore.subscribe, colorStore.getSnapshot);
 
   useEffect(() => {
     if (coverCache.has(book.id)) {
@@ -205,7 +213,7 @@ const useBookCover = (book: Book) => {
       return;
     }
     setCoverState({ url: null, status: 'loading' });
-  }, [book.id]);
+  }, [book.id, cacheVersion]);
 
   useEffect(() => {
     if (coverCache.has(book.id) || fetchingSet.has(book.id)) return;
@@ -271,112 +279,6 @@ const DynamicCover = ({ book }: { book: Book }) => {
   );
 };
 
-const Book3D = ({ book }: { book: Book }) => {
-  const color = useBookColor(book);
-
-  return (
-    <div className="absolute inset-0 flex items-center justify-center transform-style-3d">
-
-      <div className="absolute book-face" style={{ width: 'var(--w)', height: 'var(--h)', transform: 'translateZ(calc(var(--d) / 2))' }}>
-        <DynamicCover book={book} />
-      </div>
-
-      <div className="absolute book-face" style={{ width: 'var(--w)', height: 'var(--h)', transform: 'translateZ(calc(var(--d) / -2)) rotateY(180deg)', backgroundColor: color }} />
-
-      <div
-        className="absolute book-face flex items-center justify-center overflow-hidden border-x border-black/40 shadow-[inset_0_0_20px_rgba(0,0,0,0.4)]"
-        style={{
-          width: 'var(--d)', height: 'var(--h)',
-          transform: 'translateX(calc(var(--w) / -2)) rotateY(-90deg)',
-          backgroundColor: color,
-          backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.2) 100%)'
-        }}
-      >
-        <span className="font-serif text-white/90 text-[13px] md:text-sm whitespace-nowrap title-rotate drop-shadow-md px-4 tracking-wide select-none block">
-          {book.title}
-        </span>
-      </div>
-
-      <div
-        className="absolute book-face bg-[#E8E6E1] flex flex-col justify-evenly py-1 border border-[#D5D3CC] shadow-inner"
-        style={{ width: 'var(--d)', height: 'var(--h)', transform: 'translateX(calc(var(--w) / 2)) rotateY(90deg)' }}
-      >
-        {[...Array(12)].map((_, i) => <div key={i} className="w-full h-px bg-[#D5D3CC]/60" />)}
-      </div>
-
-      <div
-        className="absolute book-face bg-[#E8E6E1] border border-[#D5D3CC]"
-        style={{ width: 'var(--w)', height: 'var(--d)', transform: 'translateY(calc(var(--h) / -2)) rotateX(90deg)' }}
-      />
-
-      <div
-        className="absolute book-face bg-[#E8E6E1] border border-[#D5D3CC]"
-        style={{ width: 'var(--w)', height: 'var(--d)', transform: 'translateY(calc(var(--h) / 2)) rotateX(-90deg)' }}
-      />
-
-    </div>
-  );
-};
-
-const useDragScroll = (ref: React.RefObject<HTMLDivElement | null>) => {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    let isDown = false;
-    let startX = 0;
-    let scrollLeft = 0;
-
-    const onDown = (x: number) => {
-      isDown = true;
-      startX = x;
-      scrollLeft = el.scrollLeft;
-    };
-
-    const onMove = (x: number) => {
-      if (!isDown) return;
-      const dx = x - startX;
-      el.scrollLeft = scrollLeft - dx;
-    };
-
-    const onUp = () => { isDown = false; };
-
-    const handleMouseDown = (e: MouseEvent) => {
-      onDown(e.pageX);
-      e.preventDefault();
-    };
-    const handleMouseMove = (e: MouseEvent) => onMove(e.pageX);
-    const handleMouseUp = () => onUp();
-    const handleMouseLeave = () => onUp();
-
-    const handleTouchDown = (e: TouchEvent) => {
-      onDown(e.touches[0].pageX);
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      onMove(e.touches[0].pageX);
-    };
-    const handleTouchEnd = () => onUp();
-
-    el.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    el.addEventListener('mouseleave', handleMouseLeave);
-    el.addEventListener('touchstart', handleTouchDown, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: true });
-    el.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      el.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      el.removeEventListener('mouseleave', handleMouseLeave);
-      el.removeEventListener('touchstart', handleTouchDown);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [ref]);
-};
-
 export default function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [originRect, setOriginRect] = useState<DOMRect | null>(null);
@@ -384,9 +286,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [closingFade, setClosingFade] = useState(false);
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bookElRef = useRef<HTMLDivElement | null>(null);
-  useDragScroll(scrollerRef);
 
   const handleSelect = (book: Book, e: React.MouseEvent) => {
     if (animState !== 'idle') return;
@@ -492,21 +392,20 @@ export default function App() {
     const isMobile = window.innerWidth < 768;
     const targetLeft = isMobile ? '50%' : '28%';
     const targetTop = isMobile ? '28%' : '50%';
-    const targetScale = isMobile ? 'scale(1.2)' : 'scale(1.25)';
-    const targetRotate = `rotateY(0deg) rotateX(0deg) ${targetScale}`;
+    const targetScale = isMobile ? 1.45 : 1.65;
 
     const initialLeft = `${originRect.left + originRect.width / 2}px`;
     const initialTop = `${originRect.top + originRect.height / 2}px`;
-    const initialRotate = 'rotateY(90deg) rotateX(0deg) scale(1)';
 
     const isOpen = animState === 'open';
 
     return {
+      width: originRect.width,
+      height: originRect.height,
       top: isOpen ? targetTop : initialTop,
       left: isOpen ? targetLeft : initialLeft,
-      transform: `translate(-50%, -50%) ${isOpen ? targetRotate : initialRotate}`,
+      transform: `translate(-50%, -50%) scale(${isOpen ? targetScale : 1})`,
       transition: 'all 0.7s cubic-bezier(0.2, 0.8, 0.2, 1)',
-      '--d': `calc(var(--base-d) * ${selectedBook.mult})`
     } as React.CSSProperties;
   };
 
@@ -519,42 +418,12 @@ export default function App() {
         .font-serif { font-family: 'DM Serif Text', serif; }
         .font-sans { font-family: 'Inter', sans-serif; }
 
-        .perspective-env { perspective: 2500px; }
-        .transform-style-3d { transform-style: preserve-3d; }
-        .book-face { backface-visibility: hidden; }
-
-        :root {
-          --w: 285px;
-          --h: 430px;
-          --base-d: 52px;
-        }
-
         @media (max-width: 768px) {
           :root {
-            --w: 160px;
-            --h: 240px;
-            --base-d: 30px;
+            --cw: 160px;
+            --ch: 240px;
           }
         }
-
-        .book-bounding-box {
-          width: var(--d);
-          height: var(--h);
-        }
-
-        .book-volumetric-center {
-          width: var(--w);
-          height: var(--h);
-        }
-
-        .title-rotate {
-          transform: rotate(90deg);
-          width: var(--h);
-          text-align: center;
-        }
-
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
       <header className={`w-full py-6 px-6 md:px-12 flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 transition-opacity duration-300 ${animState !== 'idle' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -578,43 +447,37 @@ export default function App() {
           <p className="text-lg text-gray-600">The 12 best books I&rsquo;ve read recently.</p>
         </div>
 
-        <div className="flex-1 flex flex-col justify-center w-full relative perspective-env py-4 md:py-6">
-          <div ref={scrollerRef} className="w-full overflow-x-auto hide-scrollbar pb-12 cursor-grab active:cursor-grabbing">
-            <div className="flex items-end h-[300px] md:h-[500px] ml-[10vw] md:ml-[15vw]">
-              {BOOKS.map((book) => {
-                const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
-                return (
-                  <div
-                    key={book.id}
-                    ref={el => shelfRefs.current[book.id] = el}
-                    onClick={(e) => handleSelect(book, e)}
-                    className={`book-bounding-box shrink-0 group relative ${isHidden ? 'opacity-0' : 'opacity-100'} hover:-translate-y-8 cursor-pointer drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
-                    style={{ '--d': `calc(var(--base-d) * ${book.mult})`, transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' } as React.CSSProperties}
-                  >
-                    <div
-                      className="book-volumetric-center absolute top-1/2 left-1/2 transform-style-3d shadow-xl"
-                      style={{ transform: 'translate(-50%, -50%) rotateY(90deg)' }}
-                    >
-                      <Book3D book={book} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="flex-1 flex flex-col w-full relative py-4 md:py-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full">
+            {BOOKS.map((book) => {
+              const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
+              return (
+                <div
+                  key={book.id}
+                  ref={el => shelfRefs.current[book.id] = el}
+                  onClick={(e) => handleSelect(book, e)}
+                  className={`aspect-[2/3] relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} hover:scale-[1.03] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
+                  style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' }}
+                >
+                  <DynamicCover book={book} />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
       {selectedBook && (
-        <div className="fixed inset-0 perspective-env pointer-events-none z-50">
+        <div className="fixed inset-0 pointer-events-none z-50">
 
           <div
             ref={bookElRef}
-            className="book-volumetric-center absolute z-50 transform-style-3d pointer-events-auto"
+            className="absolute z-50 pointer-events-auto"
             style={{ ...getFlyingBookStyle(), opacity: closingFade ? 0 : 1, transition: `opacity 0.08s ease-out, ${getFlyingBookStyle().transition || ''}` } as React.CSSProperties}
           >
-            <div className="absolute inset-0 shadow-2xl rounded-sm" />
-            <Book3D book={selectedBook} />
+            <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
+              <DynamicCover book={selectedBook} />
+            </div>
           </div>
 
           <div
