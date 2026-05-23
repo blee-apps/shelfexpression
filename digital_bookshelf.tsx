@@ -414,9 +414,9 @@ export default function App() {
       <LoadingScreen />
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Text&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Text&family=Manrope:wght@400;500;600&display=swap');
         .font-serif { font-family: 'DM Serif Text', serif; }
-        .font-sans { font-family: 'Inter', sans-serif; }
+        .font-sans { font-family: 'Manrope', sans-serif; }
 
         @media (max-width: 768px) {
           :root {

@@ -356,7 +356,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: '#FDFDFD', color: '#1a1a1a',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Manrope", sans-serif',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       {/* HEADER */}
