@@ -492,7 +492,7 @@ export default function App() {
     const isMobile = window.innerWidth < 768;
     const targetLeft = isMobile ? '50%' : '28%';
     const targetTop = isMobile ? '28%' : '50%';
-    const targetScale = isMobile ? 'scale(1.0)' : 'scale(1.25)';
+    const targetScale = isMobile ? 'scale(1.2)' : 'scale(1.25)';
     const targetRotate = `rotateY(0deg) rotateX(0deg) ${targetScale}`;
 
     const initialLeft = `${originRect.left + originRect.width / 2}px`;
