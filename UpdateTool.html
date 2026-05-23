@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bookshelf Update Tool</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: #FDFDFD; color: #1a1a1a; padding: 0; min-height: 100vh;
+}
+h1 { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: 1rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+.header { border-bottom: 1px solid #eee; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.header p { color: #888; font-size: 0.85rem; }
+.workflow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #1a1a1a; color: #fff; font-size: 0.7rem; font-weight: 600; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.load-section { background: #f8f8f8; border: 1px solid #eee; border-radius: 8px; padding: 20px; margin-bottom: 28px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.load-section > div { flex: 1; min-width: 200px; }
+.load-section label { display: block; font-size: 0.8rem; font-weight: 500; color: #666; margin-bottom: 6px; }
+.load-section input[type="file"] { font-size: 0.85rem; width: 100%; }
+.load-section textarea { width: 100%; height: 80px; font-family: 'SF Mono', 'Menlo', monospace; font-size: 0.75rem; padding: 8px; border: 1px solid #ddd; border-radius: 4px; resize: vertical; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s; text-decoration: none;
+}
+.btn-primary { background: #1a1a1a; color: #fff; }
+.btn-primary:hover { background: #333; }
+.btn-secondary { background: #eee; color: #333; }
+.btn-secondary:hover { background: #ddd; }
+.btn-small { padding: 5px 10px; font-size: 0.75rem; }
+.btn-danger { background: #e74c3c; color: #fff; }
+.btn-danger:hover { background: #c0392b; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.slot {
+  background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 12px; position: relative;
+  transition: box-shadow 0.15s; display: flex; flex-direction: column; gap: 6px;
+}
+.slot:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.slot-empty { border-style: dashed; border-color: #ddd; background: #fafafa; align-items: center; justify-content: center; min-height: 160px; color: #bbb; font-size: 0.85rem; cursor: pointer; }
+.slot-empty:hover { border-color: #bbb; color: #999; background: #f5f5f5; }
+.slot-number { position: absolute; top: 6px; left: 8px; font-size: 0.65rem; font-weight: 600; color: #bbb; background: #f5f5f5; padding: 1px 6px; border-radius: 4px; }
+.slot-cover {
+  width: 100%; aspect-ratio: 2/3; background: #f0f0f0; border-radius: 4px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #bbb;
+}
+.slot-cover img { width: 100%; height: 100%; object-fit: cover; }
+.slot-title { font-size: 0.85rem; font-weight: 600; line-height: 1.3; overflow-wrap: break-word; }
+.slot.dragging { opacity: 0.4; }
+.slot.drag-over { border-color: #1a1a1a; box-shadow: 0 0 0 2px rgba(26,26,26,0.15); }
+.slot.drag-over .slot-number { background: #1a1a1a; color: #fff; }
+.slot-author { font-size: 0.75rem; color: #888; }
+.slot-year { font-size: 0.7rem; color: #aaa; }
+.slot-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 6px; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1000; align-items: center; justify-content: center; padding: 24px; }
+.modal-overlay.active { display: flex; }
+.modal { background: #fff; border-radius: 12px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
+.modal-header h3 { font-size: 1rem; font-weight: 600; }
+.modal-close { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #999; padding: 4px; line-height: 1; }
+.modal-close:hover { color: #333; }
+.modal-body { padding: 20px; }
+.modal-body label { display: block; font-size: 0.8rem; font-weight: 500; color: #555; margin-bottom: 4px; margin-top: 12px; }
+.modal-body label:first-child { margin-top: 0; }
+.modal-body input, .modal-body textarea, .modal-body select {
+  width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.85rem; font-family: inherit;
+}
+.modal-body textarea { min-height: 60px; resize: vertical; }
+.modal-body .field-row { display: flex; gap: 10px; }
+.modal-body .field-row > * { flex: 1; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid #eee; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Search results */
+.search-box { display: flex; gap: 8px; margin-bottom: 8px; }
+.search-box input { flex: 1; }
+.search-results { max-height: 240px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; }
+.search-result {
+  display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.1s;
+}
+.search-result:last-child { border-bottom: none; }
+.search-result:hover { background: #f8f8f8; }
+.search-result img { width: 40px; height: 60px; object-fit: cover; border-radius: 3px; background: #f0f0f0; flex-shrink: 0; }
+.search-result-info { flex: 1; min-width: 0; }
+.search-result-info .sr-title { font-weight: 600; font-size: 0.85rem; }
+.search-result-info .sr-author { font-size: 0.75rem; color: #888; }
+.search-result-info .sr-meta { font-size: 0.7rem; color: #aaa; }
+.search-result-info .sr-isbn { font-size: 0.65rem; color: #bbb; font-family: monospace; }
+.search-status { font-size: 0.75rem; color: #888; padding: 8px 0; }
+
+/* Output */
+.output-section { background: #f8f8f8; border: 1px solid #eee; border-radius: 8px; padding: 20px; }
+.output-section textarea { width: 100%; min-height: 300px; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 0.72rem; line-height: 1.6; padding: 12px; border: 1px solid #ddd; border-radius: 6px; resize: vertical; white-space: pre; }
+.output-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 0.85rem; z-index: 2000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.empty-slot-click { cursor: pointer; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #666; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .load-section { flex-direction: column; }
+  .container { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Bookshelf Update Tool</h1>
+    <p>Edit the 12-book selection and generate code for <strong>digital_bookshelf.tsx</strong></p>
+  </div>
+  <div class="workflow">
+    <span class="step-badge">1</span> Load data
+    <span class="step-badge">2</span> Edit books
+    <span class="step-badge">3</span> Copy code
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- LOAD SECTION -->
+  <div class="load-section">
+    <div>
+      <label for="fileInput">Upload <code>digital_bookshelf.tsx</code></label>
+      <input type="file" id="fileInput" accept=".tsx,.txt,.js">
+    </div>
+    <div style="flex:0;align-self:flex-end;padding-bottom:2px;">
+      <span style="color:#bbb;font-size:0.8rem;">or</span>
+    </div>
+    <div style="flex:2;">
+      <label for="pasteArea">Paste the <code>RAW_BOOKS</code> array here</label>
+      <textarea id="pasteArea" placeholder='Paste the RAW_BOOKS array from digital_bookshelf.tsx, starting at const RAW_BOOKS = [...]'></textarea>
+    </div>
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:6px;align-self:flex-end;">
+      <button class="btn btn-primary" id="loadBtn">&#8593; Load</button>
+      <button class="btn btn-secondary btn-small" id="refreshBtn">&#8635; Refresh</button>
+    </div>
+  </div>
+
+  <!-- GRID -->
+  <h2>Books &mdash; <span id="slotCount">0</span>/16 slots filled</h2>
+  <div class="grid" id="grid"></div>
+
+  <!-- OUTPUT -->
+  <div class="output-section">
+    <h2 style="margin-bottom:8px;">Generated Code</h2>
+    <textarea id="output" readonly placeholder="Click 'Generate Code' below..."></textarea>
+    <div class="output-actions">
+      <button class="btn btn-primary" id="generateBtn">&#9889; Generate Code</button>
+      <button class="btn btn-secondary" id="copyBtn">&#128203; Copy</button>
+      <button class="btn btn-secondary" id="saveBtn" style="display:none;">&#128190; Save to file</button>
+      <span id="outputInfo" style="font-size:0.75rem;color:#aaa;margin-left:auto;"></span>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Edit Book <span id="editSlotLabel">#0</span></h3>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="search-box">
+        <input type="text" id="searchTitle" placeholder="Title (required)">
+        <input type="text" id="searchAuthor" placeholder="Author (required)">
+        <button class="btn btn-secondary btn-small" id="searchBtn">Search</button>
+      </div>
+      <div id="searchStatus" class="search-status">Search OpenLibrary by title and author above.</div>
+      <div id="searchResults" class="search-results"></div>
+
+      <label for="editTitle">Title</label>
+      <input type="text" id="editTitle">
+
+      <div class="field-row">
+        <div>
+          <label for="editAuthor">Author</label>
+          <input type="text" id="editAuthor">
+        </div>
+        <div style="max-width:100px;">
+          <label for="editYear">Year</label>
+          <input type="number" id="editYear">
+        </div>
+      </div>
+
+      <label for="editIsbn">ISBN</label>
+      <input type="text" id="editIsbn" placeholder="Used for cover art fallback">
+
+      <label for="editGr">Goodreads ID <span style="font-weight:400;color:#aaa;">(optional, used for the &ldquo;View on Goodreads&rdquo; link)</span></label>
+      <input type="text" id="editGr" placeholder="e.g. 19322249">
+
+      <label for="editSynopsis">Synopsis</label>
+      <textarea id="editSynopsis" rows="3"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalClear">Clear</button>
+      <button class="btn btn-primary" id="modalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// --- STATE ---
+const slots = []; // Array of 16 entries (null = empty)
+const SLOT_COUNT = 16;
+
+let editingIndex = -1;
+let fileHandle = null; // For File System Access API
+
+// --- DOM REFS ---
+const $ = id => document.getElementById(id);
+const gridEl = $('grid');
+const fileInput = $('fileInput');
+const pasteArea = $('pasteArea');
+const loadBtn = $('loadBtn');
+const refreshBtn = $('refreshBtn');
+const slotCount = $('slotCount');
+const output = $('output');
+const generateBtn = $('generateBtn');
+const copyBtn = $('copyBtn');
+const saveBtn = $('saveBtn');
+const outputInfo = $('outputInfo');
+const modal = $('modal');
+const editSlotLabel = $('editSlotLabel');
+const modalClose = $('modalClose');
+const searchTitle = $('searchTitle');
+const searchAuthor = $('searchAuthor');
+const searchBtn = $('searchBtn');
+const searchStatus = $('searchStatus');
+const searchResults = $('searchResults');
+const editTitle = $('editTitle');
+const editAuthor = $('editAuthor');
+const editYear = $('editYear');
+const editIsbn = $('editIsbn');
+const editGr = $('editGr');
+const editSynopsis = $('editSynopsis');
+const modalClear = $('modalClear');
+const modalSave = $('modalSave');
+const toastEl = $('toast');
+
+// --- TOAST ---
+let toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+// --- PARSER ---
+function parseRAWBOOKS(text) {
+  const match = text.match(/RAW_BOOKS\s*=\s*\[([\s\S]*?)\];/);
+  if (!match) throw new Error('Could not find RAW_BOOKS array in the text.');
+  const body = match[1];
+
+  // Split on top-level { ... }, handling nested braces
+  const entries = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        entries.push(body.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  if (depth !== 0) throw new Error('Unbalanced braces in RAW_BOOKS.');
+
+  return entries.map((entry, idx) => {
+    // Helper: extract string value for a key (handles both "..." and '...' quoting)
+    const getStr = (key) => {
+      const re = new RegExp(key + ':\\s*(["\'])(.*?)\\1');
+      const m = entry.match(re);
+      return m ? m[2] : '';
+    };
+    const getNum = (key) => {
+      const re = new RegExp(key + ':\\s*(\\d+)');
+      const m = entry.match(re);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    return {
+      id: getStr('id'),
+      isbn: getStr('isbn'),
+      title: getStr('title'),
+      author: getStr('author'),
+      year: getNum('year'),
+      synopsis: getStr('synopsis'),
+      gr: getStr('gr'),
+    };
+  });
+}
+
+function fillSlots(books) {
+  // Reset to 16 empty slots
+  slots.length = 0;
+  for (let i = 0; i < SLOT_COUNT; i++) slots.push(null);
+
+  // Fill first N slots with parsed books
+  books.forEach((book, i) => {
+    if (i < SLOT_COUNT) slots[i] = book;
+  });
+
+  renderGrid();
+  updateSlotCount();
+  showToast(`Loaded ${books.length} book${books.length !== 1 ? 's' : ''}.`);
+}
+
+// --- LOADING ---
+function loadFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const books = parseRAWBOOKS(e.target.result);
+      fillSlots(books);
+    } catch (err) {
+      showToast('Error: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadFromPaste(text) {
+  try {
+    const books = parseRAWBOOKS(text);
+    fillSlots(books);
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  }
+}
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) loadFromFile(fileInput.files[0]);
+});
+
+loadBtn.addEventListener('click', () => {
+  const text = pasteArea.value.trim();
+  if (text) loadFromPaste(text);
+  else if (fileInput.files.length > 0) loadFromFile(fileInput.files[0]);
+  else showToast('Upload a file or paste the RAW_BOOKS array.');
+});
+
+refreshBtn.addEventListener('click', () => {
+  // Re-prompt file upload
+  fileInput.value = '';
+  fileInput.click();
+});
+
+// --- REORDER ---
+let dragSourceIndex = -1;
+
+function moveBook(from, to) {
+  if (from === to) return;
+  if (from < 0 || from >= slots.length || to < 0 || to >= slots.length) return;
+  const book = slots[from];
+  if (!book) return;
+  slots.splice(from, 1);
+  slots.splice(to, 0, book);
+  renderGrid();
+  updateSlotCount();
+  showToast(`Moved book #${from + 1} to #${to + 1}.`);
+}
+
+// --- RENDER ---
+function renderGrid() {
+  gridEl.innerHTML = '';
+  slots.forEach((book, i) => {
+    const div = document.createElement('div');
+    if (book) {
+      div.className = 'slot';
+      div.draggable = true;
+      div.dataset.index = String(i);
+      div.innerHTML = `
+        <span class="slot-number">#${i + 1}</span>
+        <div class="slot-cover" id="cover-${i}">
+          <div class="spinner"></div>
+        </div>
+        <div class="slot-title">${escHtml(book.title || 'Untitled')}</div>
+        <div class="slot-author">${escHtml(book.author || '')}</div>
+        <div class="slot-year">${book.year || ''}</div>
+        <div class="slot-actions">
+          <button class="btn btn-secondary btn-small" data-edit="${i}">Edit</button>
+          <button class="btn btn-danger btn-small" data-remove="${i}">Remove</button>
+        </div>
+      `;
+      loadCover(book, i);
+
+      div.addEventListener('dragstart', (e) => {
+        dragSourceIndex = i;
+        div.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i));
+      });
+      div.addEventListener('dragend', () => {
+        div.classList.remove('dragging');
+        gridEl.querySelectorAll('.slot.drag-over').forEach(el => el.classList.remove('drag-over'));
+        dragSourceIndex = -1;
+      });
+      div.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      div.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        if (i !== dragSourceIndex) div.classList.add('drag-over');
+      });
+      div.addEventListener('dragleave', () => {
+        div.classList.remove('drag-over');
+      });
+      div.addEventListener('drop', (e) => {
+        e.preventDefault();
+        div.classList.remove('drag-over');
+        const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (!isNaN(from) && from !== i) moveBook(from, i);
+      });
+    } else {
+      div.className = 'slot slot-empty';
+      div.innerHTML = `<span class="empty-slot-click" data-edit="${i}">+ Empty slot #${i + 1}</span>`;
+    }
+    gridEl.appendChild(div);
+  });
+
+  // Event delegation
+  gridEl.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-edit]');
+    const removeBtn = e.target.closest('[data-remove]');
+    if (editBtn) openEdit(parseInt(editBtn.dataset.edit, 10));
+    if (removeBtn) removeBook(parseInt(removeBtn.dataset.remove, 10));
+  });
+}
+
+function updateSlotCount() {
+  const filled = slots.filter(b => b !== null).length;
+  slotCount.textContent = filled;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// --- COVER LOADING ---
+function loadCover(book, index) {
+  const el = document.getElementById(`cover-${index}`);
+  if (!el) return;
+
+  const showPlaceholder = () => {
+    el.innerHTML = `<span style="color:#ccc;font-size:0.65rem;text-align:center;padding:0 8px;line-height:1.3;">No cover</span>`;
+  };
+
+  if (!book.isbn) { showPlaceholder(); return; }
+
+  el.innerHTML = '<div class="spinner"></div>';
+  const url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`;
+  const img = new Image();
+  const timeout = setTimeout(() => { img.src = ''; showPlaceholder(); }, 8000);
+
+  img.onload = () => {
+    clearTimeout(timeout);
+    if (img.naturalWidth > 1 && img.naturalHeight > 1) {
+      el.innerHTML = '';
+      el.appendChild(img);
+    } else {
+      showPlaceholder();
+    }
+  };
+  img.onerror = () => { clearTimeout(timeout); showPlaceholder(); };
+  img.src = url;
+}
+
+function reloadAllCovers() {
+  slots.forEach((book, i) => {
+    if (book) loadCover(book, i);
+  });
+}
+
+// --- CRUD ---
+function removeBook(index) {
+  if (index >= 0 && index < slots.length) {
+    slots[index] = null;
+    renderGrid();
+    updateSlotCount();
+    showToast(`Removed book #${index + 1}.`);
+  }
+}
+
+// --- MODAL ---
+function openEdit(index) {
+  editingIndex = index;
+  editSlotLabel.textContent = `#${index + 1}`;
+
+  const book = slots[index];
+  if (book) {
+    editTitle.value = book.title || '';
+    editAuthor.value = book.author || '';
+    editYear.value = book.year || '';
+    editIsbn.value = book.isbn || '';
+    editGr.value = book.gr || '';
+    editSynopsis.value = book.synopsis || '';
+    searchTitle.value = book.title || '';
+    searchAuthor.value = book.author || '';
+  } else {
+    editTitle.value = '';
+    editAuthor.value = '';
+    editYear.value = '';
+    editIsbn.value = '';
+    editGr.value = '';
+    editSynopsis.value = '';
+    searchTitle.value = '';
+    searchAuthor.value = '';
+  }
+
+  searchStatus.textContent = 'Search OpenLibrary by title and author above.';
+  searchResults.innerHTML = '';
+  modal.classList.add('active');
+}
+
+modalClose.addEventListener('click', () => modal.classList.remove('active'));
+modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+
+modalClear.addEventListener('click', () => {
+  if (editingIndex >= 0) slots[editingIndex] = null;
+  modal.classList.remove('active');
+  renderGrid();
+  updateSlotCount();
+  showToast('Cleared slot.');
+});
+
+modalSave.addEventListener('click', () => {
+  const title = editTitle.value.trim();
+  const author = editAuthor.value.trim();
+  if (!title) { showToast('Title is required.'); return; }
+  if (!author) { showToast('Author is required.'); return; }
+
+  slots[editingIndex] = {
+    id: String(editingIndex + 1),
+    isbn: editIsbn.value.trim(),
+    title: title,
+    author: author,
+    year: parseInt(editYear.value, 10) || 0,
+    synopsis: editSynopsis.value.trim(),
+    gr: editGr.value.trim(),
+  };
+
+  modal.classList.remove('active');
+  renderGrid();
+  updateSlotCount();
+  showToast(`Saved book #${editingIndex + 1}.`);
+});
+
+// --- SEARCH ---
+const searchController = { current: null };
+
+searchBtn.addEventListener('click', () => doSearch());
+
+searchTitle.addEventListener('keydown', (e) => { if (e.key === 'Enter') searchAuthor.focus(); });
+searchAuthor.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+
+async function doSearch() {
+  const title = searchTitle.value.trim();
+  const author = searchAuthor.value.trim();
+  if (!title && !author) { showToast('Enter at least a title or author.'); return; }
+
+  searchStatus.textContent = 'Searching...';
+  searchResults.innerHTML = '<div style="padding:12px;"><div class="spinner" style="margin:0 auto;"></div></div>';
+
+  if (searchController.current) searchController.current.abort();
+  const ac = new AbortController();
+  searchController.current = ac;
+
+  try {
+    const queryParts = [];
+    if (title) queryParts.push(`intitle:${encodeURIComponent(title)}`);
+    if (author) queryParts.push(`inauthor:${encodeURIComponent(author)}`);
+
+    const resp = await fetch(
+      `https://openlibrary.org/search.json?q=${queryParts.join('+')}&limit=10&fields=key,title,author_name,first_publish_year,isbn,cover_i`,
+      { signal: ac.signal }
+    );
+    const data = await resp.json();
+    const docs = data.docs || [];
+
+    if (docs.length === 0) {
+      searchStatus.textContent = 'No results found. Try different search terms.';
+      searchResults.innerHTML = '';
+      return;
+    }
+
+    searchStatus.textContent = `Found ${docs.length} result${docs.length !== 1 ? 's' : ''}. Click one to fill the form.`;
+    searchResults.innerHTML = '';
+
+    docs.forEach((doc) => {
+      const coverId = doc.cover_i;
+      const isbns = doc.isbn || [];
+      const row = document.createElement('div');
+      row.className = 'search-result';
+      row.innerHTML = `
+        <img src="${coverId ? `https://covers.openlibrary.org/b/id/${coverId}-S.jpg` : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="60"%3E%3Crect fill="%23f0f0f0" width="40" height="60"/%3E%3Ctext x="20" y="32" text-anchor="middle" fill="%23ccc" font-size="10"%3EN/A%3C/text%3E%3C/svg%3E'}"
+             alt="" loading="lazy" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2260%22%3E%3Crect fill=%22%23f0f0f0%22 width=%2240%22 height=%2260%22/%3E%3C/svg%3E'">
+        <div class="search-result-info">
+          <div class="sr-title">${escHtml(doc.title || 'Unknown')}</div>
+          <div class="sr-author">${escHtml(doc.author_name ? doc.author_name[0] : 'Unknown')}</div>
+          <div class="sr-meta">${doc.first_publish_year || '?'}</div>
+          <div class="sr-isbn">${isbns[0] ? 'ISBN: ' + isbns[0] : ''}</div>
+        </div>
+      `;
+      row.dataset.title = doc.title || '';
+      row.dataset.author = doc.author_name ? doc.author_name[0] : '';
+      row.dataset.year = doc.first_publish_year || '';
+      row.dataset.isbn = isbns[0] || '';
+      row.dataset.key = doc.key || '';
+
+      row.addEventListener('click', async () => {
+        // Fill in basic fields
+        editTitle.value = row.dataset.title;
+        editAuthor.value = row.dataset.author;
+        editYear.value = row.dataset.year;
+        editIsbn.value = row.dataset.isbn;
+
+        // Try to fetch synopsis from OpenLibrary details
+        if (row.dataset.key) {
+          editSynopsis.value = 'Loading synopsis...';
+          try {
+            const detailResp = await fetch(`https://openlibrary.org${row.dataset.key}.json`);
+            const detail = await detailResp.json();
+            const desc = detail.description;
+            if (typeof desc === 'string') {
+              editSynopsis.value = desc;
+            } else if (desc && typeof desc.value === 'string') {
+              editSynopsis.value = desc.value;
+            } else {
+              editSynopsis.value = '';
+            }
+          } catch {
+            editSynopsis.value = '';
+          }
+        }
+
+        searchStatus.textContent = 'Book details filled from selection.';
+        showToast('Book data loaded from OpenLibrary.');
+      });
+
+      searchResults.appendChild(row);
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    searchStatus.textContent = 'Search failed. Check your connection and try again.';
+    searchResults.innerHTML = '';
+    showToast('Search error: ' + err.message);
+  }
+}
+
+// --- CODE GENERATION ---
+function generateCode() {
+  const filled = slots.filter(b => b !== null);
+  if (filled.length === 0) return '';
+
+  const lines = filled.map((book, i) => {
+    const escDq = (s) => String(s).replace(/"/g, '\\"');
+    const escSq = (s) => String(s).replace(/'/g, "\\'");
+    return `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}' }`;
+  });
+
+  return 'const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];';
+}
+
+generateBtn.addEventListener('click', () => {
+  const code = generateCode();
+  output.value = code;
+  if (code) {
+    outputInfo.textContent = `${slots.filter(b => b !== null).length} books encoded.`;
+    showToast('Code generated.');
+  } else {
+    outputInfo.textContent = 'No books to encode.';
+    showToast('Add some books first.');
+  }
+});
+
+copyBtn.addEventListener('click', async () => {
+  if (!output.value) { showToast('Generate code first.'); return; }
+  try {
+    await navigator.clipboard.writeText(output.value);
+    showToast('Copied to clipboard.');
+  } catch {
+    // Fallback
+    output.select();
+    document.execCommand('copy');
+    showToast('Copied to clipboard.');
+  }
+});
+
+// --- FILE SYSTEM ACCESS API (direct save) ---
+async function initSaveBtn() {
+  // Check if the API is available
+  if ('showSaveFilePicker' in window && 'showDirectoryPicker' in window) {
+    saveBtn.style.display = 'inline-flex';
+    saveBtn.addEventListener('click', saveToFile);
+  }
+}
+
+async function saveToFile() {
+  if (!output.value) { showToast('Generate code first.'); return; }
+
+  try {
+    // Try to get a file handle from the user
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'digital_bookshelf.tsx',
+      types: [{
+        description: 'TypeScript React file',
+        accept: { 'text/typescript': ['.tsx'] },
+      }],
+    });
+
+    const writable = await handle.createWritable();
+    await writable.write(output.value);
+    await writable.close();
+    fileHandle = handle;
+    showToast('Saved to ' + handle.name);
+  } catch (err) {
+    if (err.name === 'AbortError') return; // User cancelled
+    showToast('Save failed: ' + err.message);
+  }
+}
+
+// --- KEYBOARD SHORTCUTS ---
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modal.classList.contains('active')) {
+    modal.classList.remove('active');
+  }
+});
+
+// --- INIT ---
+initSaveBtn();
+
+// Pre-fill with sample data to demonstrate
+function loadSampleData() {
+  const sample = [
+    { id: '1', isbn: '177148776', title: "It Lasts Forever and Then It's Over", author: 'Anne de Marcken', year: 2024, synopsis: "A haunting, spare novel about a zombie navigating the afterlife.", gr: '177148776' },
+    { id: '2', isbn: '0307946892', title: 'Tigerman', author: 'Nick Harkaway', year: 2014, synopsis: "Sergeant Lester Ferris serves on the island of Mancreu.", gr: '19322249' },
+    { id: '3', isbn: '203200544', title: 'Perfection', author: 'Vincenzo Latronico', year: 2022, synopsis: "Millennial expat couple Anna and Tom are living the dream in Berlin.", gr: '203200544' },
+    { id: '4', isbn: '1555978401', title: 'Lanny', author: 'Max Porter', year: 2019, synopsis: "In a village not far from London, Lanny is a boy who has a special connection to the woods.", gr: '39738353' },
+    { id: '5', isbn: '128533513', title: 'Make Something Wonderful', author: 'Steve Jobs', year: 2023, synopsis: "A curated collection of Steve Jobs's speeches, interviews, and correspondence.", gr: '128533513' },
+    { id: '6', isbn: '0995624233', title: 'There Is No Antimemetics Division', author: 'qntm', year: 2020, synopsis: "An antimeme is an idea with self-censoring properties.", gr: '54870256' },
+    { id: '7', isbn: '0374139946', title: 'Dilla Time', author: 'Dan Charnas', year: 2022, synopsis: "The life and legacy of J Dilla.", gr: '57693653' },
+    { id: '8', isbn: '75302296', title: 'People Collide', author: 'Isle McElroy', year: 2023, synopsis: "A gender-bending, body-switching novel.", gr: '75302296' },
+    { id: '9', isbn: '123163147', title: 'The Future', author: 'Naomi Alderman', year: 2023, synopsis: "A handful of friends plot a daring heist.", gr: '123163147' },
+    { id: '10', isbn: '0812550706', title: 'Speaker for the Dead', author: 'Orson Scott Card', year: 1986, synopsis: "Three thousand years after the destruction of the bugger race.", gr: '7967' },
+    { id: '11', isbn: '123136728', title: 'Orbital', author: 'Samantha Harvey', year: 2023, synopsis: "Six astronauts and cosmonauts rotate through the ISS.", gr: '123136728' },
+    { id: '12', isbn: '0812976711', title: 'The Satanic Verses', author: 'Salman Rushdie', year: 1988, synopsis: "A hijacked jumbo jet blows apart above the English Channel.", gr: '12781' },
+  ];
+  fillSlots(sample);
+}
+
+// If data can be loaded from the current directory (when served via file://, we can't read files directly)
+loadSampleData();
+</script>
+</body>
+</html>
