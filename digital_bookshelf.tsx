@@ -287,8 +287,15 @@ export default function App() {
   const [animState, setAnimState] = useState<'idle' | 'opening' | 'open' | 'closing'>('idle');
   const [showAdmin, setShowAdmin] = useState(false);
   const [closingFade, setClosingFade] = useState(false);
+  const [navBook, setNavBook] = useState<Book | null>(null);
+  const [navPhase, setNavPhase] = useState<'exit' | 'enter' | null>(null);
+  const [navDir, setNavDir] = useState<'next' | 'prev'>('next');
+  const [exitReady, setExitReady] = useState(false);
+  const [enterReady, setEnterReady] = useState(false);
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const bookElRef = useRef<HTMLDivElement | null>(null);
+  const navTargetRef = useRef<Book | null>(null);
+  const navExitYRef = useRef(0);
 
   const handleSelect = (book: Book, e: React.MouseEvent) => {
     if (animState !== 'idle') return;
@@ -304,21 +311,28 @@ export default function App() {
   }, [selectedBook]);
 
   const navigateBooks = useCallback((direction: 'prev' | 'next') => {
-    if (animState !== 'open' || !selectedBook) return;
+    if (animState !== 'open' || !selectedBook || navPhase) return;
     const idx = BOOKS.findIndex(b => b.id === selectedBook.id);
+    let nextBook: Book | null = null;
+    if (direction === 'next' && idx < BOOKS.length - 1) nextBook = BOOKS[idx + 1];
+    else if (direction === 'prev' && idx > 0) nextBook = BOOKS[idx - 1];
+    if (!nextBook) return;
 
-    if (direction === 'next' && idx < BOOKS.length - 1) {
-      const nextBook = BOOKS[idx + 1];
-      setOriginRect(shelfRefs.current[nextBook.id]!.getBoundingClientRect());
-      setSelectedBook(nextBook);
+    if (originRect) {
+      const isM = window.innerWidth < 768;
+      if (isM) {
+        navExitYRef.current = Math.min((originRect.height * 1.45) / 2 + 80, window.innerHeight * 0.38);
+      } else {
+        navExitYRef.current = window.innerHeight * 0.5;
+      }
     }
 
-    if (direction === 'prev' && idx > 0) {
-      const prevBook = BOOKS[idx - 1];
-      setOriginRect(shelfRefs.current[prevBook.id]!.getBoundingClientRect());
-      setSelectedBook(prevBook);
-    }
-  }, [animState, selectedBook]);
+    navTargetRef.current = nextBook;
+    setOriginRect(shelfRefs.current[nextBook.id]!.getBoundingClientRect());
+    setNavBook(selectedBook);
+    setNavDir(direction);
+    setNavPhase('exit');
+  }, [animState, selectedBook, navPhase, originRect]);
 
   useEffect(() => {
     if (animState === 'opening') {
@@ -327,16 +341,46 @@ export default function App() {
     }
     if (animState === 'closing') {
       setClosingFade(false);
-      const swapTimer = setTimeout(() => setClosingFade(true), 620);
+      const swapTimer = setTimeout(() => setClosingFade(true), 600);
       const cleanupTimer = setTimeout(() => {
         setSelectedBook(null);
         setOriginRect(null);
         setAnimState('idle');
         setClosingFade(false);
-      }, 700);
+      }, 680);
       return () => { clearTimeout(swapTimer); clearTimeout(cleanupTimer); };
     }
   }, [animState]);
+
+  useEffect(() => {
+    if (navPhase === 'exit') {
+      if (!exitReady) {
+        const t = requestAnimationFrame(() => setExitReady(true));
+        return () => cancelAnimationFrame(t);
+      }
+      const t = setTimeout(() => {
+        setSelectedBook(navTargetRef.current!);
+        setNavPhase('enter');
+        setExitReady(false);
+        setEnterReady(false);
+      }, 400);
+      return () => clearTimeout(t);
+    }
+    if (navPhase === 'enter') {
+      if (!enterReady) {
+        const t = requestAnimationFrame(() => setEnterReady(true));
+        return () => cancelAnimationFrame(t);
+      }
+      const t = setTimeout(() => {
+        setNavBook(null);
+        setNavPhase(null);
+        setNavDir('next');
+        setExitReady(false);
+        setEnterReady(false);
+      }, 1250);
+      return () => clearTimeout(t);
+    }
+  }, [navPhase, exitReady, enterReady]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -386,38 +430,91 @@ export default function App() {
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchend', onEnd);
     };
-  }, [animState]);
+  }, [animState, navPhase]);
 
   const getFlyingBookStyle = () => {
     if (!originRect || !selectedBook) return {};
 
     const isMobile = window.innerWidth < 768;
-    const targetLeft = isMobile ? '50%' : '28%';
     const targetScale = isMobile ? 1.45 : 1.65;
-
-    const initialLeft = `${originRect.left + originRect.width / 2}px`;
-    const initialTop = `${originRect.top + originRect.height / 2}px`;
-
     const isOpen = animState === 'open';
 
-    let topValue: string;
-    if (isOpen && isMobile) {
-      const buttonsBottom = 80;
-      const coverHalfHeight = (originRect.height * targetScale) / 2;
-      const computedTop = coverHalfHeight + buttonsBottom;
-      const maxTop = window.innerHeight * 0.38;
-      topValue = `${Math.min(computedTop, maxTop)}px`;
+    const cx = originRect.left + originRect.width / 2;
+    const cy = originRect.top + originRect.height / 2;
+
+    let tx: string, ty: string;
+    if (isOpen) {
+      if (isMobile) {
+        const halfH = (originRect.height * targetScale) / 2;
+        const topPx = Math.min(halfH + 80, window.innerHeight * 0.38);
+        tx = '50vw';
+        ty = `${topPx}px`;
+      } else {
+        tx = '28vw';
+        ty = '50vh';
+      }
     } else {
-      topValue = isOpen ? (isMobile ? '30%' : '50%') : initialTop;
+      tx = `${cx}px`;
+      ty = `${cy}px`;
     }
 
     return {
       width: originRect.width,
       height: originRect.height,
-      top: topValue,
-      left: isOpen ? targetLeft : initialLeft,
-      transform: `translate(-50%, -50%) scale(${isOpen ? targetScale : 1})`,
-      transition: 'all 0.7s cubic-bezier(0.2, 0.8, 0.2, 1)',
+      transform: `translate(${tx}, ${ty}) translate(-50%, -50%) scale(${isOpen ? targetScale : 1})`,
+    } as React.CSSProperties;
+  };
+
+  const getExitInitStyle = () => {
+    if (!originRect) return {};
+    const isM = window.innerWidth < 768;
+    const ts = isM ? 1.45 : 1.65;
+    if (isM) {
+      const halfH = (originRect.height * ts) / 2;
+      const topPx = Math.min(halfH + 80, window.innerHeight * 0.38);
+      const cx = window.innerWidth * 0.5;
+      return {
+        width: originRect.width,
+        height: originRect.height,
+        transform: `translate(${cx}px, ${topPx}px) translate(-50%, -50%) scale(${ts})`,
+      } as React.CSSProperties;
+    }
+    const cx = window.innerWidth * 0.28;
+    const cy = window.innerHeight * 0.5;
+    return {
+      width: originRect.width,
+      height: originRect.height,
+      transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(1.65)`,
+    } as React.CSSProperties;
+  };
+
+  const getExitStyle = () => {
+    if (!navBook || !originRect) return {};
+    const isM = window.innerWidth < 768;
+    const dist = isM ? window.innerWidth * 1.5 : window.innerWidth * 1.5;
+    const offX = navDir === 'next' ? -dist : dist;
+    const yPos = isM ? navExitYRef.current : window.innerHeight * 0.5;
+    return {
+      width: originRect.width,
+      height: originRect.height,
+      transform: `translate(${offX}px, ${yPos}px) translate(-50%, -50%) scale(0.8)`,
+    } as React.CSSProperties;
+  };
+
+  const getEnterInitStyle = () => {
+    if (!originRect) return {};
+    const isM = window.innerWidth < 768;
+    const ts = isM ? 1.45 : 1.65;
+    const dist = isM ? window.innerWidth * 1.5 : window.innerWidth * 1.5;
+    const fromX = navDir === 'next' ? dist : -dist;
+    const halfH = (originRect.height * ts) / 2;
+    const topPx = Math.min(halfH + 80, window.innerHeight * 0.38);
+    const yPos = isM ? topPx : window.innerHeight * 0.5;
+    return {
+      width: originRect.width,
+      height: originRect.height,
+      transform: `translate(${fromX}px, ${yPos}px) translate(-50%, -50%) scale(${ts})`,
+      transition: 'none',
     } as React.CSSProperties;
   };
 
@@ -495,15 +592,35 @@ export default function App() {
         <div className="fixed inset-0 pointer-events-none z-50">
           <div className={`absolute inset-0 bg-[#FDFDFD] transition-opacity duration-700 ease-out ${animState === 'closing' ? 'opacity-0' : 'opacity-100'}`} />
 
-          <div
-            ref={bookElRef}
-            className="absolute z-50 pointer-events-auto"
-            style={{ ...getFlyingBookStyle(), opacity: closingFade ? 0 : 1, transition: `opacity 0.08s ease-out, ${getFlyingBookStyle().transition || ''}` } as React.CSSProperties}
-          >
-            <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
-              <DynamicCover book={selectedBook} />
+          {navBook && navPhase === 'exit' && (
+            <div
+              className="fixed top-0 left-0 z-[70] pointer-events-auto"
+              style={{
+                ...(exitReady ? getExitStyle() : getExitInitStyle()),
+                transition: 'transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+              } as React.CSSProperties}
+            >
+              <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
+                <DynamicCover book={navBook} />
+              </div>
             </div>
-          </div>
+          )}
+
+          {navPhase !== 'exit' && (
+            <div
+              ref={bookElRef}
+              className="fixed top-0 left-0 z-50 pointer-events-auto"
+              style={{
+                ...(navPhase === 'enter' && !enterReady ? getEnterInitStyle() : getFlyingBookStyle()),
+                opacity: closingFade ? 0 : 1,
+                transition: 'transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.08s ease-out',
+              } as React.CSSProperties}
+            >
+              <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
+                <DynamicCover book={selectedBook} />
+              </div>
+            </div>
+          )}
 
           <div
             className={`absolute right-0 bottom-0 w-full md:w-[55%] h-[52%] md:h-full flex flex-col justify-start md:justify-center p-8 md:p-16 z-40 bg-gradient-to-t from-[#FDFDFD] via-[#FDFDFD] to-transparent md:to-[#FDFDFD]/90 md:bg-[#FDFDFD] pointer-events-auto transition-all duration-700 delay-150 ease-out overflow-y-auto
