@@ -122,13 +122,15 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     let url: string | null = null;
 
     let res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`);
-    let data = await res.json();
-    url = data.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+    if (res.status !== 429) {
+      const gData = await res.json();
+      url = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+    }
 
     if (!url) {
       res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-      data = await res.json();
-      const coverI = data.docs?.[0]?.cover_i;
+      const olData = await res.json();
+      const coverI = olData.docs?.[0]?.cover_i;
       if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
       else url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
     }

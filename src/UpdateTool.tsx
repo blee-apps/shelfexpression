@@ -40,6 +40,10 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [searching, setSearching] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Goodreads URL lookup state
+  const [grUrl, setGrUrl] = useState('');
+  const [grLookupStatus, setGrLookupStatus] = useState('');
+
   // Paste / load state
   const [pasteText, setPasteText] = useState('');
 
@@ -184,6 +188,8 @@ export default function UpdateTool({ onClose, books }: Props) {
     setSearchAuthorQuery(book?.author || '');
     setSearchStatus('Search OpenLibrary by title and author.');
     setSearchResults([]);
+    setGrUrl('');
+    setGrLookupStatus('');
   };
 
   const saveEdit = () => {
@@ -233,12 +239,12 @@ export default function UpdateTool({ onClose, books }: Props) {
     abortRef.current = ac;
 
     try {
-      const parts: string[] = [];
-      if (title) parts.push(`intitle:${encodeURIComponent(title)}`);
-      if (author) parts.push(`inauthor:${encodeURIComponent(author)}`);
+      const qParts: string[] = [];
+      if (title) qParts.push(title);
+      if (author) qParts.push(author);
 
       const resp = await fetch(
-        `https://openlibrary.org/search.json?q=${parts.join('+')}&limit=10&fields=key,title,author_name,first_publish_year,isbn,cover_i`,
+        `https://openlibrary.org/search.json?q=${encodeURIComponent(qParts.join(' '))}&limit=10&fields=key,title,author_name,first_publish_year,isbn,cover_i,id_goodreads`,
         { signal: ac.signal }
       );
       const data = await resp.json();
@@ -266,7 +272,8 @@ export default function UpdateTool({ onClose, books }: Props) {
     setEditYear(String(doc.first_publish_year || ''));
     const isbn = doc.isbn?.[0] || '';
     setEditIsbn(isbn);
-    setEditGr('');
+    const goodreadsId = doc.id_goodreads?.[0] || '';
+    setEditGr(goodreadsId);
 
     if (doc.key) {
       setEditSynopsis('Loading synopsis...');
@@ -287,6 +294,57 @@ export default function UpdateTool({ onClose, books }: Props) {
     }
     setSearchStatus('Book details filled from selection.');
     showToast('Book data loaded from OpenLibrary.');
+  };
+
+  // --- GOODREADS URL LOOKUP ---
+  const lookupGoodreadsUrl = async () => {
+    const url = grUrl.trim();
+    if (!url) { showToast('Paste a Goodreads book URL first.'); return; }
+
+    const match = url.match(/goodreads\.com\/book\/show\/(\d+)/);
+    if (!match) { showToast('Could not extract Goodreads ID from that URL.'); return; }
+
+    const grId = match[1];
+    setGrLookupStatus('Looking up book on OpenLibrary...');
+
+    try {
+      const resp = await fetch(`https://openlibrary.org/api/books?bibkeys=GR_${grId}&format=json&jscmd=data`);
+      const data = await resp.json();
+      const entry = data[`GR_${grId}`];
+
+      if (!entry) {
+        setGrLookupStatus('Book not found on OpenLibrary. Try a different source.');
+        showToast('No data found for that Goodreads ID.');
+        return;
+      }
+
+      setEditTitle(entry.title || editTitle);
+      if (entry.authors?.[0]?.name) setEditAuthor(entry.authors[0].name);
+
+      if (entry.publish_date) {
+        const yearMatch = entry.publish_date.match(/\d{4}/);
+        if (yearMatch) setEditYear(yearMatch[0]);
+      }
+
+      const isbns = entry.identifiers?.isbn_10 || entry.identifiers?.isbn_13 || [];
+      if (isbns.length > 0) setEditIsbn(isbns[0]);
+
+      setEditGr(grId);
+
+      if (entry.excerpts?.[0]?.text) {
+        setEditSynopsis(entry.excerpts[0].text);
+      } else if (entry.description?.value) {
+        setEditSynopsis(entry.description.value);
+      } else if (typeof entry.description === 'string') {
+        setEditSynopsis(entry.description);
+      }
+
+      setGrLookupStatus(`Loaded from Goodreads #${grId}.`);
+      showToast(`Book data loaded from Goodreads ID ${grId}.`);
+    } catch {
+      setGrLookupStatus('Lookup failed. Check your connection.');
+      showToast('Goodreads lookup failed.');
+    }
   };
 
   // --- CODE GENERATION ---
@@ -554,7 +612,7 @@ export default function UpdateTool({ onClose, books }: Props) {
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: '0.8rem' }}>{doc.title || 'Unknown'}</div>
                         <div style={{ fontSize: '0.72rem', color: '#888' }}>{doc.author_name?.[0] || 'Unknown'}</div>
-                        <div style={{ fontSize: '0.65rem', color: '#aaa' }}>{doc.first_publish_year || '?'}{(doc.isbn?.[0] ? ` — ISBN: ${doc.isbn[0]}` : '')}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#aaa' }}>{doc.first_publish_year || '?'}{(doc.isbn?.[0] ? ` — ISBN: ${doc.isbn[0]}` : '')}{(doc.id_goodreads?.[0] ? ` — GR: ${doc.id_goodreads[0]}` : '')}</div>
                       </div>
                     </div>
                   ))}
@@ -583,6 +641,18 @@ export default function UpdateTool({ onClose, books }: Props) {
                 Goodreads ID <span style={{ fontWeight: 400, color: '#aaa' }}>(for &ldquo;View on Goodreads&rdquo; link)</span>
               </label>
               <input value={editGr} onChange={e => setEditGr(e.target.value)} style={inputStyle} placeholder="e.g. 19322249" />
+
+              <label style={labelStyle}>
+                Goodreads URL <span style={{ fontWeight: 400, color: '#aaa' }}>(paste to auto-fill)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={grUrl} onChange={e => setGrUrl(e.target.value)}
+                  placeholder="https://www.goodreads.com/book/show/19322249-tigerman"
+                  style={inputStyle}
+                  onKeyDown={e => e.key === 'Enter' && lookupGoodreadsUrl()} />
+                <button onClick={lookupGoodreadsUrl} style={btnStyle({ small: true })}>Lookup</button>
+              </div>
+              {grLookupStatus && <div style={{ fontSize: '0.72rem', color: '#888', marginTop: 4 }}>{grLookupStatus}</div>}
 
               <label style={labelStyle}>Synopsis</label>
               <textarea value={editSynopsis} onChange={e => setEditSynopsis(e.target.value)} rows={3}
@@ -624,17 +694,7 @@ function BookCover({ book }: { book: Book }) {
     const tryCovers = async () => {
       let url: string | null = null;
 
-      // 1. Google Books API by title+author
-      try {
-        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`);
-        const data = await res.json();
-        url = data.items?.[0]?.volumeInfo?.imageLinks?.thumbnail || null;
-        if (url) {
-          url = url.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
-        }
-      } catch {}
-
-      // 2. OpenLibrary search by title+author
+      // 1. OpenLibrary search by title+author
       if (!url) {
         try {
           const res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
