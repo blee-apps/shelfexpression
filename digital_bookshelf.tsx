@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import UpdateTool from './src/UpdateTool';
 
 // --- DATA SOURCE ---
 const RAW_BOOKS = [
@@ -17,7 +18,7 @@ const RAW_BOOKS = [
   { id: '12', isbn: '0812976711', title: 'The Satanic Verses', author: 'Salman Rushdie', year: 1988, synopsis: "Just before dawn one winter's morning, a hijacked jumbo jet blows apart high above the English Channel. A magical realist epic about migration, faith, and transformation.", gr: '12781' },
 ];
 
-interface Book {
+export interface Book {
   id: string; isbn: string; title: string; author: string;
   year: number; synopsis: string; gr: string; mult: number;
 }
@@ -381,6 +382,7 @@ export default function App() {
   const [originRect, setOriginRect] = useState<DOMRect | null>(null);
   const [animState, setAnimState] = useState<'idle' | 'opening' | 'open' | 'closing'>('idle');
   const [closeCrossfade, setCloseCrossfade] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bookElRef = useRef<HTMLDivElement | null>(null);
@@ -436,6 +438,11 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'U') {
+        e.preventDefault();
+        setShowAdmin(v => !v);
+        return;
+      }
       if (e.key === 'Escape') handleClose();
       if (e.key === 'ArrowRight') navigateBooks('next');
       if (e.key === 'ArrowLeft') navigateBooks('prev');
@@ -669,6 +676,7 @@ export default function App() {
 
         </div>
       )}
+      {showAdmin && <UpdateTool books={BOOKS} onClose={() => setShowAdmin(false)} />}
     </div>
   );
 }
