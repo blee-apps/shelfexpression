@@ -393,7 +393,6 @@ export default function App() {
 
     const isMobile = window.innerWidth < 768;
     const targetLeft = isMobile ? '50%' : '28%';
-    const targetTop = isMobile ? '30%' : '50%';
     const targetScale = isMobile ? 1.45 : 1.65;
 
     const initialLeft = `${originRect.left + originRect.width / 2}px`;
@@ -401,15 +400,38 @@ export default function App() {
 
     const isOpen = animState === 'open';
 
+    let topValue: string;
+    if (isOpen && isMobile) {
+      const buttonsBottom = 80;
+      const coverHalfHeight = (originRect.height * targetScale) / 2;
+      const computedTop = coverHalfHeight + buttonsBottom;
+      const maxTop = window.innerHeight * 0.38;
+      topValue = `${Math.min(computedTop, maxTop)}px`;
+    } else {
+      topValue = isOpen ? (isMobile ? '30%' : '50%') : initialTop;
+    }
+
     return {
       width: originRect.width,
       height: originRect.height,
-      top: isOpen ? targetTop : initialTop,
+      top: topValue,
       left: isOpen ? targetLeft : initialLeft,
       transform: `translate(-50%, -50%) scale(${isOpen ? targetScale : 1})`,
       transition: 'all 0.7s cubic-bezier(0.2, 0.8, 0.2, 1)',
     } as React.CSSProperties;
   };
+
+  const mb = window.innerWidth < 768;
+  const textMarginTop = mb && originRect && selectedBook && animState === 'open'
+    ? (() => {
+        const scale = 1.45;
+        const halfH = (originRect.height * scale) / 2;
+        const center = Math.min(halfH + 80, window.innerHeight * 0.38);
+        const bottom = center + halfH;
+        const panelTop = window.innerHeight * 0.48;
+        return Math.max(48, Math.round(bottom - panelTop + 24));
+      })()
+    : (mb ? 48 : 0);
 
   return (
     <div className="h-screen w-screen bg-[#FDFDFD] text-gray-900 overflow-x-hidden overflow-y-auto font-sans relative selection:bg-gray-900 selection:text-white flex flex-col">
@@ -488,7 +510,7 @@ export default function App() {
               ${animState === 'open' ? 'opacity-100 translate-x-0 md:translate-y-0 translate-y-0' : 'opacity-0 translate-y-12 md:translate-y-0 md:translate-x-8'}`}
             style={{ top: typeof window !== 'undefined' && window.innerWidth < 768 ? 'auto' : '0' }}
           >
-            <div className="max-w-md w-full mx-auto md:mx-0 mt-12 md:mt-0">
+            <div className="max-w-md w-full mx-auto md:mx-0" style={{ marginTop: textMarginTop }}>
               <h1 className="font-serif text-3xl md:text-5xl text-gray-900 mb-2 leading-tight drop-shadow-sm">
                 {selectedBook.title}
               </h1>
