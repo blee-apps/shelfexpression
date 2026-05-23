@@ -580,7 +580,7 @@ export default function App() {
 
         <div className="flex-1 flex flex-col justify-center w-full relative perspective-env py-4 md:py-12">
           <div ref={scrollerRef} className="w-full overflow-x-auto hide-scrollbar pb-12 cursor-grab active:cursor-grabbing">
-            <div className="flex items-end h-[300px] md:h-[500px] justify-center px-[10vw] md:px-[15vw]">
+            <div className="flex items-end h-[300px] md:h-[500px] ml-[10vw] md:ml-[15vw]">
               {BOOKS.map((book) => {
                 const isHidden = selectedBook?.id === book.id && (animState === 'open' || (animState === 'closing' && !closeCrossfade));
                 return (
@@ -588,7 +588,7 @@ export default function App() {
                     key={book.id}
                     ref={el => shelfRefs.current[book.id] = el}
                     onClick={(e) => handleSelect(book, e)}
-                    className={`book-bounding-box shrink-0 group relative ${isHidden ? 'opacity-0' : 'opacity-100'} transition-all duration-300 ease-out hover:-translate-y-8 cursor-pointer`}
+                    className={`book-bounding-box shrink-0 group relative ${isHidden ? 'opacity-0' : 'opacity-100'} transition-all duration-300 ease-out hover:-translate-y-8 cursor-pointer drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
                     style={{ '--d': `calc(var(--base-d) * ${book.mult})` } as React.CSSProperties}
                   >
                     <div
