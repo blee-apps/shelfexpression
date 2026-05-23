@@ -381,8 +381,8 @@ export default function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [originRect, setOriginRect] = useState<DOMRect | null>(null);
   const [animState, setAnimState] = useState<'idle' | 'opening' | 'open' | 'closing'>('idle');
-  const [closeCrossfade, setCloseCrossfade] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [closingFade, setClosingFade] = useState(false);
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bookElRef = useRef<HTMLDivElement | null>(null);
@@ -424,15 +424,15 @@ export default function App() {
       return () => cancelAnimationFrame(timer);
     }
     if (animState === 'closing') {
-      setCloseCrossfade(false);
-      const fadeTimer = setTimeout(() => setCloseCrossfade(true), 380);
+      setClosingFade(false);
+      const swapTimer = setTimeout(() => setClosingFade(true), 620);
       const cleanupTimer = setTimeout(() => {
         setSelectedBook(null);
         setOriginRect(null);
         setAnimState('idle');
-        setCloseCrossfade(false);
-      }, 750);
-      return () => { clearTimeout(fadeTimer); clearTimeout(cleanupTimer); };
+        setClosingFade(false);
+      }, 700);
+      return () => { clearTimeout(swapTimer); clearTimeout(cleanupTimer); };
     }
   }, [animState]);
 
@@ -582,14 +582,14 @@ export default function App() {
           <div ref={scrollerRef} className="w-full overflow-x-auto hide-scrollbar pb-12 cursor-grab active:cursor-grabbing">
             <div className="flex items-end h-[300px] md:h-[500px] ml-[10vw] md:ml-[15vw]">
               {BOOKS.map((book) => {
-                const isHidden = selectedBook?.id === book.id && (animState === 'open' || (animState === 'closing' && !closeCrossfade));
+                const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
                 return (
                   <div
                     key={book.id}
                     ref={el => shelfRefs.current[book.id] = el}
                     onClick={(e) => handleSelect(book, e)}
-                    className={`book-bounding-box shrink-0 group relative ${isHidden ? 'opacity-0' : 'opacity-100'} transition-all duration-300 ease-out hover:-translate-y-8 cursor-pointer drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
-                    style={{ '--d': `calc(var(--base-d) * ${book.mult})` } as React.CSSProperties}
+                    className={`book-bounding-box shrink-0 group relative ${isHidden ? 'opacity-0' : 'opacity-100'} hover:-translate-y-8 cursor-pointer drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
+                    style={{ '--d': `calc(var(--base-d) * ${book.mult})`, transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' } as React.CSSProperties}
                   >
                     <div
                       className="book-volumetric-center absolute top-1/2 left-1/2 transform-style-3d shadow-xl"
@@ -611,7 +611,7 @@ export default function App() {
           <div
             ref={bookElRef}
             className="book-volumetric-center absolute z-50 transform-style-3d pointer-events-auto"
-            style={{ ...getFlyingBookStyle(), opacity: closeCrossfade ? 0 : 1, transition: `opacity 0.35s ease-out, ${getFlyingBookStyle().transition || ''}` } as React.CSSProperties}
+            style={{ ...getFlyingBookStyle(), opacity: closingFade ? 0 : 1, transition: `opacity 0.08s ease-out, ${getFlyingBookStyle().transition || ''}` } as React.CSSProperties}
           >
             <div className="absolute inset-0 shadow-2xl rounded-sm" />
             <Book3D book={selectedBook} />
