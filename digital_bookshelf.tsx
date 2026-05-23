@@ -393,7 +393,7 @@ export default function App() {
 
     const isMobile = window.innerWidth < 768;
     const targetLeft = isMobile ? '50%' : '28%';
-    const targetTop = isMobile ? '28%' : '50%';
+    const targetTop = isMobile ? '30%' : '50%';
     const targetScale = isMobile ? 1.45 : 1.65;
 
     const initialLeft = `${originRect.left + originRect.width / 2}px`;
@@ -471,6 +471,7 @@ export default function App() {
 
       {selectedBook && (
         <div className="fixed inset-0 pointer-events-none z-50">
+          <div className={`absolute inset-0 bg-[#FDFDFD] transition-opacity duration-700 ease-out ${animState === 'closing' ? 'opacity-0' : 'opacity-100'}`} />
 
           <div
             ref={bookElRef}
@@ -516,7 +517,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className={`absolute top-6 right-6 md:top-10 md:right-10 z-50 flex space-x-2 transition-opacity duration-300 pointer-events-auto ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}>
+          <div className={`absolute top-6 right-6 md:top-10 md:right-10 z-[60] flex space-x-2 transition-opacity duration-300 pointer-events-auto ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}>
             <button
               onClick={() => navigateBooks('prev')}
               disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === 0}
