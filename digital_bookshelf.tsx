@@ -570,15 +570,15 @@ export default function App() {
         </nav>
       </header>
 
-      <div className={`flex-1 flex flex-col w-full max-w-6xl mx-auto px-6 md:px-12 md:pt-12 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]
+      <div className={`flex-1 flex flex-col w-full max-w-6xl mx-auto px-6 md:px-12 md:pt-6 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]
         ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 translate-y-12 scale-95 pointer-events-none' : 'opacity-100 translate-y-0 scale-100'}`}
       >
-        <div className="mb-6 md:mb-12">
+        <div className="mb-6 md:mb-6">
           <h1 className="text-4xl md:text-5xl font-serif text-gray-900 mb-4">Bookshelf</h1>
           <p className="text-lg text-gray-600">The 12 best books I&rsquo;ve read recently.</p>
         </div>
 
-        <div className="flex-1 flex flex-col justify-center w-full relative perspective-env py-4 md:py-12">
+        <div className="flex-1 flex flex-col justify-center w-full relative perspective-env py-4 md:py-6">
           <div ref={scrollerRef} className="w-full overflow-x-auto hide-scrollbar pb-12 cursor-grab active:cursor-grabbing">
             <div className="flex items-end h-[300px] md:h-[500px] ml-[10vw] md:ml-[15vw]">
               {BOOKS.map((book) => {
