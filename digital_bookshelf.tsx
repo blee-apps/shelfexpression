@@ -354,6 +354,12 @@ export default function App() {
   }, [animState]);
 
   useEffect(() => {
+    if (!navBook) return;
+    const t = setTimeout(() => setNavBook(null), 1250);
+    return () => clearTimeout(t);
+  }, [navBook]);
+
+  useEffect(() => {
     if (navPhase === 'exit') {
       if (!exitReady) {
         const t = requestAnimationFrame(() => setExitReady(true));
@@ -362,7 +368,6 @@ export default function App() {
       const t = setTimeout(() => {
         setSelectedBook(navTargetRef.current!);
         setNavPhase('enter');
-        setExitReady(false);
         setEnterReady(false);
       }, 400);
       return () => clearTimeout(t);
@@ -373,7 +378,6 @@ export default function App() {
         return () => cancelAnimationFrame(t);
       }
       const t = setTimeout(() => {
-        setNavBook(null);
         setNavPhase(null);
         setNavDir('next');
         setExitReady(false);
@@ -637,7 +641,7 @@ export default function App() {
         <div className="fixed inset-0 pointer-events-none z-50">
           <div className={`absolute inset-0 bg-[#FDFDFD] transition-opacity duration-700 ease-out ${animState === 'closing' ? 'opacity-0' : 'opacity-100'}`} />
 
-          {navBook && navPhase === 'exit' && (
+          {navBook && (
             <div
               className="fixed top-0 left-0 z-[70] pointer-events-auto"
               style={{
