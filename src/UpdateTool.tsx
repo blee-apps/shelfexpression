@@ -23,6 +23,7 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [editingIndex, setEditingIndex] = useState(-1);
   const [generatedCode, setGeneratedCode] = useState('');
   const [toast, setToast] = useState('');
+  const [useVitsoeShelf, setUseVitsoeShelf] = useState(true);
 
   // Edit form fields
   const [editTitle, setEditTitle] = useState('');
@@ -123,6 +124,10 @@ export default function UpdateTool({ onClose, books }: Props) {
     try {
       const parsed = parseRAWBOOKS(text);
       fillSlots(parsed);
+      const vitsoeMatch = text.match(/USE_VITSOE_SHELF\s*=\s*(true|false)/);
+      if (vitsoeMatch) {
+        setUseVitsoeShelf(vitsoeMatch[1] === 'true');
+      }
     } catch (err: any) {
       showToast('Error: ' + err.message);
     }
@@ -357,7 +362,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     const lines = filled.map((book, i) =>
       `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}' }`
     );
-    const code = 'const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];';
+    const code = 'const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];\n\nexport const USE_VITSOE_SHELF = ' + useVitsoeShelf + ';';
     setGeneratedCode(code);
     showToast(`Code generated (${filled.length} books).`);
   };
@@ -543,9 +548,13 @@ export default function UpdateTool({ onClose, books }: Props) {
         <div style={{ background: '#f8f8f8', border: '1px solid #eee', borderRadius: 8, padding: 16 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#666' }}>Generated Code</span>
-            <button onClick={generateCode} style={btnStyle({ small: true })}>&#9889; Generate</button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', cursor: 'pointer', marginLeft: 16 }}>
+              <input type="checkbox" checked={useVitsoeShelf} onChange={e => setUseVitsoeShelf(e.target.checked)} />
+              Enable Vitsoe Bookshelf
+            </label>
+            <button onClick={generateCode} style={{ ...btnStyle({ small: true }), marginLeft: 'auto' }}>&#9889; Generate</button>
             <button onClick={copyCode} style={btnStyle({ secondary: true, small: true })}><Copy size={12} /> Copy</button>
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#aaa' }}>
+            <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
               {generatedCode ? `${filledCount} books encoded` : ''}
             </span>
           </div>
@@ -557,7 +566,7 @@ export default function UpdateTool({ onClose, books }: Props) {
             }}
           />
           <div style={{ fontSize: '0.72rem', color: '#aaa', marginTop: 8 }}>
-            Copy this code and paste it into <strong>digital_bookshelf.tsx</strong>, replacing the <code>RAW_BOOKS</code> array.
+            Copy this code and paste it into <strong>digital_bookshelf.tsx</strong>, replacing the <code>RAW_BOOKS</code> array and the <code>USE_VITSOE_SHELF</code> flag.
             The app will reload with your updated selection.
           </div>
         </div>

@@ -18,6 +18,8 @@ const RAW_BOOKS = [
   { id: '12', isbn: '123163147', title: "The Future", author: 'Naomi Alderman', year: 2023, synopsis: "A handful of friends plot a daring heist to save the world from the tech billionaires who are intent on surviving the apocalypse in their private bunkers.", gr: '123163147' },
 ];
 
+export const USE_VITSOE_SHELF = true;
+
 export interface Book {
   id: string; isbn: string; title: string; author: string;
   year: number; synopsis: string; gr: string; mult: number;
@@ -281,7 +283,159 @@ const DynamicCover = ({ book }: { book: Book }) => {
   );
 };
 
+// --- SHELF STRUCTURE (Vitsoe 606-style, purely decorative) ---
+
+// Measures the books grid rows and the grid's own offsetTop from its parent
+const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>) => {
+  const [state, setState] = useState<{
+    rows: { top: number; bottom: number }[];
+    gridOffsetTop: number;
+    gridHeight: number;
+  }>({ rows: [], gridOffsetTop: 0, gridHeight: 0 });
+
+  useEffect(() => {
+    const compute = () => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const children = Array.from(grid.children) as HTMLElement[];
+      if (children.length === 0) return;
+
+      // Position of the grid relative to its offsetParent (the relative wrapper)
+      const gridOffsetTop = grid.offsetTop;
+      const gridHeight = grid.offsetHeight;
+
+      const ROW_TOLERANCE = 4; // px — handles sub-pixel rendering differences
+      const seen: { top: number; bottom: number }[] = [];
+      const containerTop = grid.getBoundingClientRect().top + window.scrollY;
+
+      children.forEach((child) => {
+        const r = child.getBoundingClientRect();
+        const rowTop = r.top + window.scrollY - containerTop;
+        const rowBottom = r.bottom + window.scrollY - containerTop;
+
+        // Find an existing row within tolerance, otherwise start a new one
+        const existing = seen.find(s => Math.abs(s.top - rowTop) < ROW_TOLERANCE);
+        if (existing) {
+          existing.bottom = Math.max(existing.bottom, rowBottom);
+        } else {
+          seen.push({ top: rowTop, bottom: rowBottom });
+        }
+      });
+
+      setState({
+        rows: seen.sort((a, b) => a.top - b.top),
+        gridOffsetTop,
+        gridHeight,
+      });
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    if (gridRef.current) ro.observe(gridRef.current);
+    window.addEventListener('scroll', compute, { passive: true });
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('scroll', compute);
+    };
+  }, [gridRef]);
+
+  return state;
+};
+
+const ShelfStructure = ({ gridRef }: { gridRef: React.RefObject<HTMLDivElement | null> }) => {
+  const { rows, gridOffsetTop, gridHeight } = useShelfRows(gridRef);
+
+  if (rows.length === 0) return null;
+
+  // The shelf-wall is absolutely positioned within the same relative parent as the grid.
+  // We align it precisely to the grid's position (gridOffsetTop) with extra padding around it.
+  const PAD = 16; // extra breathing room on each side
+
+  const uprightPositions = [
+    { left: 0 },
+    { right: 0 },
+  ];
+
+  return (
+    <div
+      className="shelf-wall"
+      style={{
+        position: 'absolute',
+        top: gridOffsetTop - PAD,
+        left: -PAD,
+        right: -PAD,
+        bottom: -32, // bleed past container padding to fill to page bottom
+        pointerEvents: 'none',
+        zIndex: 0,
+        overflow: 'visible',
+      }}
+      aria-hidden="true"
+    >
+      {/* Vertical uprights */}
+      {uprightPositions.map((pos, i) => (
+        <div
+          key={`upright-${i}`}
+          className="shelf-upright"
+          style={{ ...pos }}
+        />
+      ))}
+
+      {/* One shelf board + brackets per row */}
+      {rows.map((row, i) => {
+        // row.bottom is in grid coordinates; +PAD converts to shelf-wall coordinate space.
+        // No extra gap — books sit directly on the board surface.
+        const boardTop = row.bottom + PAD;
+        return (
+          <div key={`shelf-${i}`}>
+            {/* Soft shadow cast by books down onto the shelf surface */}
+            <div
+              style={{
+                position: 'absolute',
+                left: PAD,
+                right: PAD,
+                top: boardTop - 12,
+                height: 12,
+                background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.09))',
+                zIndex: 3,
+                pointerEvents: 'none',
+              }}
+            />
+            {/* Shelf board — spans full upright-to-upright width */}
+            <div
+              className="shelf-board"
+              style={{ top: boardTop, left: 4, right: 4 }}
+            />
+            {/* Left bracket */}
+            <div
+              className="shelf-bracket"
+              style={{
+                position: 'absolute',
+                top: boardTop,
+                left: 16,
+                width: 12,
+                height: 24,
+              }}
+            />
+            {/* Right bracket */}
+            <div
+              className="shelf-bracket"
+              style={{
+                position: 'absolute',
+                top: boardTop,
+                right: 16,
+                width: 12,
+                height: 24,
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function App() {
+
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [originRect, setOriginRect] = useState<DOMRect | null>(null);
   const [animState, setAnimState] = useState<'idle' | 'opening' | 'open' | 'closing'>('idle');
@@ -297,6 +451,7 @@ export default function App() {
   const bookElRef = useRef<HTMLDivElement | null>(null);
   const navTargetRef = useRef<Book | null>(null);
   const navExitYRef = useRef(0);
+  const gridRef = useRef<HTMLDivElement | null>(null);
 
   const handleSelect = (book: Book, e: React.MouseEvent) => {
     if (animState !== 'idle') return;
@@ -550,6 +705,163 @@ export default function App() {
             --ch: 240px;
           }
         }
+
+        /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
+
+        /* Wall background: warm linen with subtle vignette */
+        .shelf-wall {
+          background-color: #F5F0EB;
+          background-image:
+            radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.45) 0%, transparent 70%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+          border-radius: 4px;
+          position: relative;
+        }
+
+        /* Vertical aluminum upright (the track/standard) */
+        .shelf-upright {
+          position: absolute;
+          top: -20px;
+          bottom: -20px;
+          width: 14px;
+          z-index: 1;
+          border-radius: 3px;
+          background:
+            linear-gradient(to right,
+              #c8c8c8 0%,
+              #e8e8e8 20%,
+              #f2f2f2 38%,
+              #ffffff 48%,
+              #f0f0f0 58%,
+              #d8d8d8 80%,
+              #bcbcbc 100%
+            );
+          box-shadow:
+            inset 1px 0 0 rgba(255,255,255,0.6),
+            inset -1px 0 0 rgba(0,0,0,0.12),
+            1px 0 4px rgba(0,0,0,0.08),
+            -1px 0 2px rgba(0,0,0,0.04);
+        }
+
+        /* Slot holes punched along the upright */
+        .shelf-upright::before {
+          content: '';
+          position: absolute;
+          top: 28px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 4px;
+          bottom: 28px;
+          background:
+            repeating-linear-gradient(
+              to bottom,
+              transparent 0px,
+              transparent 7px,
+              rgba(0,0,0,0.22) 7px,
+              rgba(0,0,0,0.22) 13px
+            );
+          border-radius: 2px;
+        }
+
+        /* Horizontal shelf board */
+        .shelf-board {
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 18px;
+          z-index: 2;
+          border-radius: 2px 2px 3px 3px;
+          /* Warm birch/beech wood grain */
+          background:
+            repeating-linear-gradient(
+              88deg,
+              transparent 0px,
+              rgba(160,120,60,0.04) 1px,
+              transparent 2px,
+              transparent 18px,
+              rgba(140,100,50,0.03) 19px,
+              transparent 20px
+            ),
+            repeating-linear-gradient(
+              92deg,
+              transparent 0px,
+              rgba(180,140,80,0.03) 3px,
+              transparent 4px,
+              transparent 26px
+            ),
+            linear-gradient(to bottom,
+              #e8dcc8 0%,
+              #ddd0b4 18%,
+              #d4c8a4 40%,
+              #cfc2a0 55%,
+              #d8ccaa 72%,
+              #c8bc94 88%,
+              #b8ac84 100%
+            );
+          /* Top highlight (light hitting the top surface) */
+          box-shadow:
+            0 -1px 0 rgba(255,255,255,0.9),
+            0 1px 0 rgba(0,0,0,0.06),
+            0 3px 8px rgba(0,0,0,0.13),
+            0 6px 16px rgba(0,0,0,0.07),
+            inset 0 1px 0 rgba(255,255,255,0.55),
+            inset 0 -1px 0 rgba(0,0,0,0.08);
+        }
+
+        /* Shelf board front lip / edge-banding (darker front face) */
+        .shelf-board::after {
+          content: '';
+          position: absolute;
+          left: 0; right: 0;
+          bottom: -5px;
+          height: 5px;
+          background: linear-gradient(to bottom, #b0a07c, #9a8c68);
+          border-radius: 0 0 2px 2px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+
+        /* Shadow cast by books/shelf onto the wall behind */
+        .shelf-board::before {
+          content: '';
+          position: absolute;
+          left: -4px; right: -4px;
+          top: -24px;
+          height: 24px;
+          background: linear-gradient(to bottom,
+            transparent 0%,
+            rgba(0,0,0,0.025) 60%,
+            rgba(0,0,0,0.065) 100%
+          );
+          pointer-events: none;
+        }
+
+        /* Bracket (L-shaped support under each shelf) */
+        .shelf-bracket {
+          position: absolute;
+          bottom: 0;
+          width: 12px;
+          height: 28px;
+          z-index: 3;
+          background: linear-gradient(to right, #d0d0d0, #e8e8e8 40%, #f0f0f0 55%, #d4d4d4);
+          border-radius: 0 0 2px 2px;
+          box-shadow:
+            inset 1px 0 0 rgba(255,255,255,0.5),
+            1px 0 3px rgba(0,0,0,0.1);
+        }
+
+        /* Book bottom shadows on shelf */
+        .shelf-book-shadow {
+          position: absolute;
+          left: 0; right: 0;
+          height: 6px;
+          bottom: 18px; /* sits on top of the shelf board */
+          background: linear-gradient(to bottom,
+            rgba(0,0,0,0.0) 0%,
+            rgba(0,0,0,0.08) 100%
+          );
+          z-index: 3;
+          pointer-events: none;
+        }
       `}</style>
 
       <header className={`w-full py-6 px-6 md:px-12 flex items-center justify-between border-b border-gray-100 transition-opacity duration-300 ${animState !== 'idle' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -621,8 +933,13 @@ export default function App() {
           <p className="text-lg text-gray-600">The {BOOKS.length} best books I&rsquo;ve read recently.</p>
         </div>
 
+        {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
         <div className="flex-1 flex flex-col w-full relative py-4 md:py-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full">
+          {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
+          {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} />}
+
+          {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
+          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full relative"} style={{ zIndex: 4 }}>
             {BOOKS.map((book) => {
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return (
@@ -630,7 +947,7 @@ export default function App() {
                   key={book.id}
                   ref={el => shelfRefs.current[book.id] = el}
                   onClick={(e) => handleSelect(book, e)}
-                  className={`aspect-[2/3] relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} hover:scale-[1.03] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
+                  className={`aspect-[2/3] relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
                   style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' }}
                 >
                   <DynamicCover book={book} />

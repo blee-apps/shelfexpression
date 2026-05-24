@@ -8,7 +8,16 @@ A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and 
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
 - **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view.
-- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
+- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
+
+## Shelf Design Options
+
+The application offers two distinct, high-fidelity aesthetic presentation styles, which can be easily toggled near the top of [`digital_bookshelf.tsx`](digital_bookshelf.tsx) using the `USE_VITSOE_SHELF` flag:
+
+- **Vitsoe 606 Shelf Mode** (`USE_VITSOE_SHELF = true`): Mimics a real-life physical shelving unit. Features warm birch wood shelf boards with multi-tone grain gradients, wall-mounted aluminum upright rails with slotted standard tracks, brushed metal brackets, ambient lighting occlusion, and realistic book drop shadows. Hovering a book lifts it forward and upwards (using `origin-bottom`) to keep its base perfectly flush with the shelving surface rather than clipping through it.
+- **Minimalist Gallery Mode** (`USE_VITSOE_SHELF = false`): A sleek, clean, distraction-free modern look where book covers hover gracefully over a pure, flat background with tight responsive spacing.
+
+*Note: The **Secret Admin Tool** contains a toggle checkbox for this feature. When you click **Generate**, it automatically packs your selected shelf design preference into the generated code payload to easily copy-paste into `digital_bookshelf.tsx` alongside the updated book list.*
 
 ## How to repurpose for your own site
 
