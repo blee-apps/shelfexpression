@@ -642,7 +642,7 @@ export default function App() {
               className="fixed top-0 left-0 z-[70] pointer-events-auto"
               style={{
                 ...(exitReady ? getExitStyle() : getExitInitStyle()),
-                transition: 'transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                transition: `transform 1.2s cubic-bezier(${navDir === 'next' ? '0.4, 0, 0.7, 1' : '0.2, 0.8, 0.2, 1'})`,
               } as React.CSSProperties}
             >
               <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
