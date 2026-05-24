@@ -568,24 +568,28 @@ export default function App() {
           onClick={() => setMobileMenuOpen(v => !v)}
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
         >
-          <div className="relative w-5 h-5 flex items-center justify-center">
-            <span
-              className="absolute w-5 h-[2px] bg-current rounded transition-all duration-300"
-              style={{
-                transform: mobileMenuOpen
-                  ? 'translateY(0) rotate(45deg)'
-                  : 'translateY(-5px) rotate(0deg)',
-              }}
+          <svg viewBox="0 0 24 24" className="w-5 h-5 overflow-visible block">
+            <line
+              x1={mobileMenuOpen ? 5 : 4}
+              y1={mobileMenuOpen ? 5 : 9}
+              x2={mobileMenuOpen ? 19 : 20}
+              y2={mobileMenuOpen ? 19 : 9}
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              style={{ transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
             />
-            <span
-              className="absolute w-5 h-[2px] bg-current rounded transition-all duration-300"
-              style={{
-                transform: mobileMenuOpen
-                  ? 'translateY(0) rotate(-45deg)'
-                  : 'translateY(5px) rotate(0deg)',
-              }}
+            <line
+              x1={mobileMenuOpen ? 5 : 4}
+              y1={mobileMenuOpen ? 19 : 15}
+              x2={mobileMenuOpen ? 19 : 20}
+              y2={mobileMenuOpen ? 5 : 15}
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              style={{ transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
             />
-          </div>
+          </svg>
         </button>
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-[80] bg-[#FDFDFD] flex flex-col md:hidden">
