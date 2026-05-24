@@ -292,6 +292,7 @@ export default function App() {
   const [navDir, setNavDir] = useState<'next' | 'prev'>('next');
   const [exitReady, setExitReady] = useState(false);
   const [enterReady, setEnterReady] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const bookElRef = useRef<HTMLDivElement | null>(null);
   const navTargetRef = useRef<Book | null>(null);
@@ -547,17 +548,61 @@ export default function App() {
         }
       `}</style>
 
-      <header className={`w-full py-6 px-6 md:px-12 flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 transition-opacity duration-300 ${animState !== 'idle' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <a href="https://sangsara.net" className="font-semibold text-lg tracking-tight mb-4 md:mb-0 hover:text-gray-600 transition-colors">
+      <header className={`w-full py-6 px-6 md:px-12 flex items-center justify-between border-b border-gray-100 transition-opacity duration-300 ${animState !== 'idle' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <a href="https://sangsara.net" className="font-semibold text-lg tracking-tight hover:text-gray-600 transition-colors">
           sangsara.net
         </a>
-        <nav className="flex space-x-6 text-sm text-gray-600">
+        <nav className="hidden md:flex space-x-6 text-sm text-gray-600">
           <a href="https://sangsara.net/about/" className="hover:text-gray-900 transition-colors">About</a>
           <a href="https://sangsara.net/apps/" className="hover:text-gray-900 transition-colors">Apps</a>
           <span className="text-gray-900 font-medium">Bookshelf</span>
           <a href="https://sangsara.net/archive/" className="hover:text-gray-900 transition-colors">Archive</a>
           <a href="https://sangsara.net/subscribe/" className="hover:text-gray-900 transition-colors">Subscribe</a>
         </nav>
+        <button
+          className="md:hidden p-2 text-gray-600 hover:text-gray-900 transition-colors"
+          onClick={() => setMobileMenuOpen(v => !v)}
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+        >
+          <div className="relative w-5 h-5 flex items-center justify-center">
+            <span
+              className="absolute w-5 h-[2px] bg-current rounded transition-all duration-300"
+              style={{
+                transform: mobileMenuOpen
+                  ? 'translateY(0) rotate(45deg)'
+                  : 'translateY(-5px) rotate(0deg)',
+              }}
+            />
+            <span
+              className="absolute w-5 h-[2px] bg-current rounded transition-all duration-300"
+              style={{
+                transform: mobileMenuOpen
+                  ? 'translateY(0) rotate(-45deg)'
+                  : 'translateY(5px) rotate(0deg)',
+              }}
+            />
+          </div>
+        </button>
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-[80] bg-[#FDFDFD] flex flex-col md:hidden">
+            <div className="py-6 px-6 border-b border-gray-100 flex justify-end">
+              <button
+                className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <nav className="flex flex-col items-end px-6 pt-8 space-y-6 text-base text-gray-600">
+              <a href="https://sangsara.net/about/" className="hover:text-gray-900 transition-colors" onClick={() => setMobileMenuOpen(false)}>About</a>
+              <a href="https://sangsara.net/apps/" className="hover:text-gray-900 transition-colors" onClick={() => setMobileMenuOpen(false)}>Apps</a>
+              <span className="text-gray-900 font-medium">Bookshelf</span>
+              <a href="https://sangsara.net/archive/" className="hover:text-gray-900 transition-colors" onClick={() => setMobileMenuOpen(false)}>Archive</a>
+              <a href="https://sangsara.net/subscribe/" className="hover:text-gray-900 transition-colors" onClick={() => setMobileMenuOpen(false)}>Subscribe</a>
+            </nav>
+          </div>
+        )}
       </header>
 
       <div className={`flex-1 flex flex-col w-full max-w-6xl mx-auto px-6 md:px-12 md:pt-6 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]
