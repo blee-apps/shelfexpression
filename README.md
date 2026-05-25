@@ -8,7 +8,7 @@ A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and 
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
 - **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view. Swipe is throttled with distance (≥40px) and time (200–800ms) gates to prevent accidental triggers.
-- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
+- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses with the **Summarize with Gemini** button (when `VITE_GEMINI_API_KEY` is set), and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
 
 ## Shelf Design Options
 
@@ -54,14 +54,20 @@ const RAW_BOOKS = [
 - The page subtitle (`The {BOOKS.length} best books I've read recently.`) updates dynamically based on the number of books in `RAW_BOOKS`.
 - Header links and site references point to `sangsara.net` throughout the JSX; replace them with your own domain in the `<header>` section and anywhere else they appear.
 
-### 3. (Optional) Google Books API key
+### 3. (Optional) API keys
 
-If you're hitting Google Books rate limits (429 errors), set a Google Books API key via the `VITE_GOOGLE_BOOKS_API_KEY` environment variable. The app works without it — OpenLibrary is the primary cover/synopsis source — but the key lifts the rate limit for the Google Books fallback.
+The app works without any API keys — OpenLibrary (unthrottled) is the primary source for covers and synopses. Set these environment variables to unlock additional features:
 
-For Vercel, add `VITE_GOOGLE_BOOKS_API_KEY` in your project's **Settings → Environment Variables**. For local development, create a `.env` file:
+| Variable | Purpose |
+|----------|---------|
+| `VITE_GOOGLE_BOOKS_API_KEY` | Lifts rate limits on Google Books cover/synopsis fallback |
+| `VITE_GEMINI_API_KEY` | Enables the **Summarize with Gemini** button in the admin tool, which condenses long synopses to 2–3 sentences via Gemini 1.5 Flash. Get a free key at [aistudio.google.com](https://aistudio.google.com/apikey) (60 req/min, no credit card). |
+
+For Vercel, add these in **Settings → Environment Variables**. For local development, create a `.env` file:
 
 ```
-VITE_GOOGLE_BOOKS_API_KEY=your_api_key_here
+VITE_GOOGLE_BOOKS_API_KEY=your_key_here
+VITE_GEMINI_API_KEY=your_key_here
 ```
 
 ### 4. Build and deploy

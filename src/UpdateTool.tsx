@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Book, coverCache, fetchingSet } from '../digital_bookshelf';
 
 interface Props {
@@ -14,6 +14,7 @@ const escSq = (s: string) => s.replace(/'/g, "\\'");
 const synopsisCache = new Map<string, string>();
 const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
+const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 export default function UpdateTool({ onClose, books }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
@@ -37,6 +38,7 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [editSynopsis, setEditSynopsis] = useState('');
   const [synopsisOptions, setSynopsisOptions] = useState<string[]>([]);
   const [synopsisIndex, setSynopsisIndex] = useState(0);
+  const [summarizing, setSummarizing] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -333,6 +335,31 @@ export default function UpdateTool({ onClose, books }: Props) {
       synopsisCache.set(key, desc);
       return desc;
     } catch { return ''; }
+  };
+
+  const summarizeSynopsis = async () => {
+    if (!editSynopsis || !geminiKey) return;
+    setSummarizing(true);
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `Summarize this book synopsis in 2-3 concise sentences, keeping the key details and tone:\n\n${editSynopsis}` }] }],
+          }),
+        }
+      );
+      const data = await r.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        setEditSynopsis(text);
+        setSynopsisOptions([]);
+        setSynopsisIndex(0);
+      }
+    } catch {}
+    setSummarizing(false);
   };
 
   const selectResult = async (doc: any) => {
@@ -774,6 +801,12 @@ export default function UpdateTool({ onClose, books }: Props) {
                 <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: 3, textAlign: 'center' }}>
                   {synopsisIndex + 1} / {synopsisOptions.length}
                 </div>
+              )}
+              {geminiKey && editSynopsis && (
+                <button onClick={summarizeSynopsis} disabled={summarizing}
+                  style={{ ...btnStyle({ secondary: true, small: true }), marginTop: 4, width: '100%', justifyContent: 'center' }}>
+                  <Sparkles size={12} /> {summarizing ? 'Summarizing…' : 'Summarize with Gemini'}
+                </button>
               )}
             </div>
 
