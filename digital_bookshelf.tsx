@@ -502,13 +502,13 @@ export default function App() {
     }
     if (animState === 'closing') {
       setClosingFade(false);
-      const swapTimer = setTimeout(() => setClosingFade(true), 600);
+      const swapTimer = setTimeout(() => setClosingFade(true), 560);
       const cleanupTimer = setTimeout(() => {
         setSelectedBook(null);
         setOriginRect(null);
         setAnimState('idle');
         setClosingFade(false);
-      }, 680);
+      }, 660);
       return () => { clearTimeout(swapTimer); clearTimeout(cleanupTimer); };
     }
   }, [animState]);
@@ -988,7 +988,7 @@ export default function App() {
               style={{
                 ...(navPhase === 'enter' && !enterReady ? getEnterInitStyle() : getFlyingBookStyle()),
                 opacity: closingFade ? 0 : 1,
-                transition: 'transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.08s ease-out',
+                transition: `transform ${animState === 'closing' ? '0.55s' : '1.2s'} cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.08s ease-out`,
               } as React.CSSProperties}
             >
               <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
