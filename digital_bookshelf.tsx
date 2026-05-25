@@ -1030,7 +1030,7 @@ export default function App() {
                     bookEl.style.setProperty('--tilt-angle', `${angle}deg`);
                     bookEl.style.zIndex = '99';
                     bookEl.style.transform = `translateY(-20%) rotate(${angle}deg) scale(1.08)`;
-                    bookEl.style.boxShadow = '0 12px 28px rgba(0,0,0,0.2)';
+                    bookEl.style.boxShadow = '0 12px 28px rgba(0,0,0,0.35)';
                   }}
                   onMouseLeave={(e) => {
                     const bookEl = e.currentTarget.firstElementChild as HTMLElement;
@@ -1043,7 +1043,7 @@ export default function App() {
                 >
                   <div
                     ref={el => shelfRefs.current[book.id] = el}
-                    className={`relative overflow-hidden rounded-sm pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)] book-hover-vitsoe`}
+                    className={`relative overflow-hidden rounded-sm pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.25)] book-hover-vitsoe`}
                     style={{
                       transition: closingFade
                         ? 'opacity 0s'
