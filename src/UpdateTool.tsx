@@ -11,6 +11,7 @@ const SLOT_COUNT = 20;
 
 const escDq = (s: string) => s.replace(/"/g, '\\"');
 const escSq = (s: string) => s.replace(/'/g, "\\'");
+const synopsisCache = new Map<string, string>();
 
 export default function UpdateTool({ onClose, books }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
@@ -318,13 +319,17 @@ export default function UpdateTool({ onClose, books }: Props) {
   };
 
   const googleBooksSynopsis = async (title: string, author: string): Promise<string> => {
+    const key = `gb:${title}|${author}`;
+    const cached = synopsisCache.get(key);
+    if (cached !== undefined) return cached;
     try {
       const q = `intitle:${encodeURIComponent(title)}+inauthor:${encodeURIComponent(author)}`;
       const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&fields=items(volumeInfo(description))`);
       if (r.status === 429) return ''; // rate limited
       const data = await r.json();
-      const desc = data?.items?.[0]?.volumeInfo?.description;
-      return desc || '';
+      const desc = data?.items?.[0]?.volumeInfo?.description || '';
+      synopsisCache.set(key, desc);
+      return desc;
     } catch { return ''; }
   };
 
@@ -347,19 +352,22 @@ export default function UpdateTool({ onClose, books }: Props) {
     const olid = doc.key?.replace('/works/', 'OL');
     if (olid) bibkeys.push(olid);
 
-    // Fire ALL synopsis lookups in parallel — each source returns its own result
-    const sources: Promise<{ source: string; text: string }>[] = [];
-    if (doc.key) sources.push(olWorkSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Work', text })));
-    if (bibkeys.length > 0) sources.push(olBibkeySynopsis(bibkeys).then(text => ({ source: 'OpenLibrary Books API', text })));
-    if (doc.title || doc.author_name?.[0]) {
-      sources.push(googleBooksSynopsis(doc.title || '', doc.author_name?.[0] || '').then(text => ({ source: 'Google Books', text })));
-    }
-    if (doc.key) sources.push(olEditionSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Editions', text })));
+    // Fire OpenLibrary synopsis lookups in parallel first
+    const olSources: Promise<{ source: string; text: string }>[] = [];
+    if (doc.key) olSources.push(olWorkSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Work', text })));
+    if (bibkeys.length > 0) olSources.push(olBibkeySynopsis(bibkeys).then(text => ({ source: 'OpenLibrary Books API', text })));
+    if (doc.key) olSources.push(olEditionSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Editions', text })));
 
-    const results = await Promise.all(sources);
-    const options = results
+    const olResults = await Promise.all(olSources);
+    const options = olResults
       .filter(r => r.text && r.text.length > 0)
       .map(r => r.text);
+
+    // Only hit Google Books if OpenLibrary came up empty (avoids rate limits)
+    if (options.length === 0 && (doc.title || doc.author_name?.[0])) {
+      const gbText = await googleBooksSynopsis(doc.title || '', doc.author_name?.[0] || '');
+      if (gbText) options.push(gbText);
+    }
 
     if (options.length > 0) {
       setSynopsisOptions(options);
