@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw } from 'lucide-react';
-import { Book } from '../digital_bookshelf';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Book, coverCache, fetchingSet } from '../digital_bookshelf';
 
 interface Props {
   onClose: () => void;
@@ -32,6 +32,8 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [editIsbn, setEditIsbn] = useState('');
   const [editGr, setEditGr] = useState('');
   const [editSynopsis, setEditSynopsis] = useState('');
+  const [synopsisOptions, setSynopsisOptions] = useState<string[]>([]);
+  const [synopsisIndex, setSynopsisIndex] = useState(0);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,6 +191,8 @@ export default function UpdateTool({ onClose, books }: Props) {
     setEditIsbn(book?.isbn || '');
     setEditGr(book?.gr || '');
     setEditSynopsis(book?.synopsis || '');
+    setSynopsisOptions([]);
+    setSynopsisIndex(0);
     setSearchQuery(book?.title || '');
     setSearchAuthorQuery(book?.author || '');
     setSearchStatus('Search OpenLibrary by title and author.');
@@ -271,6 +275,59 @@ export default function UpdateTool({ onClose, books }: Props) {
     }
   };
 
+  // --- SYNOPSIS HELPERS ---
+  const olWorkSynopsis = async (key: string): Promise<string> => {
+    try {
+      const r = await fetch(`https://openlibrary.org${key}.json`);
+      const detail = await r.json();
+      const desc = detail.description;
+      if (typeof desc === 'string') return desc;
+      if (desc?.value) return desc.value;
+      return '';
+    } catch { return ''; }
+  };
+
+  const olBibkeySynopsis = async (bibkeys: string[]): Promise<string> => {
+    try {
+      const r = await fetch(`https://openlibrary.org/api/books?bibkeys=${bibkeys.join(',')}&format=json&jscmd=data`);
+      const data = await r.json();
+      for (const bibkey of bibkeys) {
+        const entry = data[bibkey];
+        if (!entry) continue;
+        if (entry.excerpts?.[0]?.text) return entry.excerpts[0].text;
+        if (entry.description?.value) return entry.description.value;
+        if (typeof entry.description === 'string') return entry.description;
+      }
+      return '';
+    } catch { return ''; }
+  };
+
+  const olEditionSynopsis = async (key: string): Promise<string> => {
+    try {
+      const r = await fetch(`https://openlibrary.org${key}/editions.json?limit=50`);
+      const data = await r.json();
+      for (const edition of (data.entries || [])) {
+        if (edition.description) {
+          if (typeof edition.description === 'string') return edition.description;
+          if (edition.description.value) return edition.description.value;
+        }
+        if (edition.excerpts?.[0]?.text) return edition.excerpts[0].text;
+      }
+      return '';
+    } catch { return ''; }
+  };
+
+  const googleBooksSynopsis = async (title: string, author: string): Promise<string> => {
+    try {
+      const q = `intitle:${encodeURIComponent(title)}+inauthor:${encodeURIComponent(author)}`;
+      const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&fields=items(volumeInfo(description))`);
+      if (r.status === 429) return ''; // rate limited
+      const data = await r.json();
+      const desc = data?.items?.[0]?.volumeInfo?.description;
+      return desc || '';
+    } catch { return ''; }
+  };
+
   const selectResult = async (doc: any) => {
     setEditTitle(doc.title || '');
     setEditAuthor(doc.author_name?.[0] || '');
@@ -280,23 +337,40 @@ export default function UpdateTool({ onClose, books }: Props) {
     const goodreadsId = doc.id_goodreads?.[0] || '';
     setEditGr(goodreadsId);
 
-    if (doc.key) {
-      setEditSynopsis('Loading synopsis...');
-      try {
-        const resp = await fetch(`https://openlibrary.org${doc.key}.json`);
-        const detail = await resp.json();
-        const desc = detail.description;
-        if (typeof desc === 'string') {
-          setEditSynopsis(desc);
-        } else if (desc?.value) {
-          setEditSynopsis(desc.value);
-        } else {
-          setEditSynopsis('');
-        }
-      } catch {
-        setEditSynopsis('');
-      }
+    setEditSynopsis('Loading synopsis...');
+
+    // Collect all synopsis identifiers
+    const bibkeys: string[] = [];
+    if (goodreadsId) bibkeys.push(`GR_${goodreadsId}`);
+    const isbns = (doc.isbn || []).slice(0, 3) as string[];
+    isbns.forEach((id) => bibkeys.push(`ISBN:${id}`));
+    const olid = doc.key?.replace('/works/', 'OL');
+    if (olid) bibkeys.push(olid);
+
+    // Fire ALL synopsis lookups in parallel — each source returns its own result
+    const sources: Promise<{ source: string; text: string }>[] = [];
+    if (doc.key) sources.push(olWorkSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Work', text })));
+    if (bibkeys.length > 0) sources.push(olBibkeySynopsis(bibkeys).then(text => ({ source: 'OpenLibrary Books API', text })));
+    if (doc.title || doc.author_name?.[0]) {
+      sources.push(googleBooksSynopsis(doc.title || '', doc.author_name?.[0] || '').then(text => ({ source: 'Google Books', text })));
     }
+    if (doc.key) sources.push(olEditionSynopsis(doc.key).then(text => ({ source: 'OpenLibrary Editions', text })));
+
+    const results = await Promise.all(sources);
+    const options = results
+      .filter(r => r.text && r.text.length > 0)
+      .map(r => r.text);
+
+    if (options.length > 0) {
+      setSynopsisOptions(options);
+      setSynopsisIndex(0);
+      setEditSynopsis(options[0]);
+    } else {
+      setSynopsisOptions([]);
+      setSynopsisIndex(0);
+      setEditSynopsis('');
+    }
+
     setSearchStatus('Book details filled from selection.');
     showToast('Book data loaded from OpenLibrary.');
   };
@@ -664,8 +738,33 @@ export default function UpdateTool({ onClose, books }: Props) {
               {grLookupStatus && <div style={{ fontSize: '0.72rem', color: '#888', marginTop: 4 }}>{grLookupStatus}</div>}
 
               <label style={labelStyle}>Synopsis</label>
-              <textarea value={editSynopsis} onChange={e => setEditSynopsis(e.target.value)} rows={3}
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+                {synopsisOptions.length > 1 && (
+                  <button onClick={() => {
+                    const idx = synopsisIndex > 0 ? synopsisIndex - 1 : synopsisOptions.length - 1;
+                    setSynopsisIndex(idx);
+                    setEditSynopsis(synopsisOptions[idx]);
+                  }} style={{ ...btnStyle({ secondary: true, small: true }), marginTop: 0, flexShrink: 0 }}>
+                    <ChevronLeft size={14} />
+                  </button>
+                )}
+                <textarea value={editSynopsis} onChange={e => setEditSynopsis(e.target.value)} rows={3}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', flex: 1 }} />
+                {synopsisOptions.length > 1 && (
+                  <button onClick={() => {
+                    const idx = synopsisIndex < synopsisOptions.length - 1 ? synopsisIndex + 1 : 0;
+                    setSynopsisIndex(idx);
+                    setEditSynopsis(synopsisOptions[idx]);
+                  }} style={{ ...btnStyle({ secondary: true, small: true }), marginTop: 0, flexShrink: 0 }}>
+                    <ChevronRight size={14} />
+                  </button>
+                )}
+              </div>
+              {synopsisOptions.length > 1 && (
+                <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: 3, textAlign: 'center' }}>
+                  {synopsisIndex + 1} / {synopsisOptions.length}
+                </div>
+              )}
             </div>
 
             <div style={{ padding: '10px 18px', borderTop: '1px solid #eee', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -700,6 +799,25 @@ function BookCover({ book }: { book: Book }) {
     setState('loading');
     setSrc(null);
 
+    const cached = coverCache.get(book.id);
+    if (cached) {
+      setSrc(cached);
+      setState('loaded');
+      return;
+    }
+
+    if (fetchingSet.has(book.id)) {
+      const check = setInterval(() => {
+        if (coverCache.has(book.id)) {
+          setSrc(coverCache.get(book.id)!);
+          setState('loaded');
+          clearInterval(check);
+        }
+      }, 200);
+      setTimeout(() => clearInterval(check), 10000);
+      return () => clearInterval(check);
+    }
+
     const tryCovers = async () => {
       let url: string | null = null;
 
@@ -731,7 +849,7 @@ function BookCover({ book }: { book: Book }) {
           img.onerror = reject;
           img.src = url!;
         });
-        if (!cancelled) { setSrc(url); setState('loaded'); }
+        if (!cancelled) { setSrc(url); setState('loaded'); coverCache.set(book.id, url); }
       } catch {
         if (!cancelled) setState('error');
       }

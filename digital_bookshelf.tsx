@@ -44,9 +44,9 @@ const BOOKS: Book[] = RAW_BOOKS.map(book => ({
 }));
 
 // --- COVER ART CACHE & COLOR CACHE ---
-const coverCache = new Map<string, string>();
+export const coverCache = new Map<string, string>();
 const colorCache = new Map<string, string>();
-const fetchingSet = new Set<string>();
+export const fetchingSet = new Set<string>();
 
 const colorStore = {
   version: 0,
