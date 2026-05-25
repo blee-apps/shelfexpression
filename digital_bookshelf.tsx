@@ -493,6 +493,13 @@ export default function App() {
 
   const handleClose = useCallback(() => {
     if (!selectedBook) return;
+    const shelfEl = shelfRefs.current[selectedBook.id];
+    if (shelfEl) {
+      shelfEl.style.removeProperty('--tilt-angle');
+      shelfEl.style.zIndex = '';
+      shelfEl.style.transform = '';
+      shelfEl.style.boxShadow = '';
+    }
     setAnimState('closing');
   }, [selectedBook]);
 
