@@ -46,6 +46,7 @@ const BOOKS: Book[] = RAW_BOOKS.map(book => ({
 // --- COVER ART CACHE & COLOR CACHE ---
 export const coverCache = new Map<string, string>();
 const colorCache = new Map<string, string>();
+const aspectRatioCache = new Map<string, number>();
 export const fetchingSet = new Set<string>();
 
 const colorStore = {
@@ -158,6 +159,7 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
       img.src = url!;
     });
 
+    aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
     coverCache.set(book.id, url);
     colorCache.set(book.id, getColorForString(book.title));
     let color = await extractDominantColor(url);
@@ -240,6 +242,11 @@ const useBookColor = (book: Book) => {
   return colorCache.get(book.id) || getColorForString(book.title);
 };
 
+const useBookAspectRatio = (book: Book) => {
+  useSyncExternalStore(colorStore.subscribe, colorStore.getSnapshot);
+  return aspectRatioCache.get(book.id) || 2/3;
+};
+
 // --- COMPONENTS ---
 const LoadingScreen = () => {
   const { ready, progress } = usePreloader();
@@ -267,14 +274,15 @@ const LoadingScreen = () => {
 const DynamicCover = ({ book }: { book: Book }) => {
   const { url, status } = useBookCover(book);
   const fallbackColor = useBookColor(book);
+  const aspectRatio = useBookAspectRatio(book);
 
   return (
-    <div className="relative w-full h-full" style={{ backgroundColor: fallbackColor }}>
+    <div className="relative w-full" style={{ aspectRatio, backgroundColor: fallbackColor }}>
       {url && (
         <img
           src={url}
           alt={`Cover of ${book.title}`}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${status === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 w-full h-full transition-opacity duration-500 ${status === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
       {status !== 'loaded' && (
@@ -944,7 +952,7 @@ export default function App() {
           {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {BOOKS.map((book) => {
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return (
@@ -952,7 +960,7 @@ export default function App() {
                   key={book.id}
                   ref={el => shelfRefs.current[book.id] = el}
                   onClick={(e) => handleSelect(book, e)}
-                  className={`aspect-[2/3] relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
+                  className={`relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
                   style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' }}
                 >
                   <DynamicCover book={book} />
