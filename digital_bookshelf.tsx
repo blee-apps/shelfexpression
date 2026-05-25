@@ -18,7 +18,7 @@ const RAW_BOOKS = [
   { id: '12', isbn: '123163147', title: "The Future", author: 'Naomi Alderman', year: 2023, synopsis: "A handful of friends plot a daring heist to save the world from the tech billionaires who are intent on surviving the apocalypse in their private bunkers.", gr: '123163147' },
 ];
 
-export const USE_VITSOE_SHELF = false;
+export const USE_VITSOE_SHELF = true;
 
 export interface Book {
   id: string; isbn: string; title: string; author: string;
