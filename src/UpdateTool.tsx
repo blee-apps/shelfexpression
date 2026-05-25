@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
-import { Book, coverCache, fetchingSet } from '../digital_bookshelf';
+import { Book, coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 
 interface Props {
   onClose: () => void;
@@ -634,7 +634,7 @@ export default function UpdateTool({ onClose, books }: Props) {
                     <GripVertical size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />#{i + 1}
                   </div>
                   <div style={{
-                    width: '100%', aspectRatio: '2/3', background: '#f0f0f0', borderRadius: 4,
+                    width: '100%', aspectRatio: aspectRatioCache.get(book.id) || 2/3, background: '#f0f0f0', borderRadius: 4,
                     overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <BookCover book={book} />
@@ -893,7 +893,7 @@ function BookCover({ book }: { book: Book }) {
           img.onerror = reject;
           img.src = url!;
         });
-        if (!cancelled) { setSrc(url); setState('loaded'); coverCache.set(book.id, url); }
+        if (!cancelled) { setSrc(url); setState('loaded'); coverCache.set(book.id, url); aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight); }
       } catch {
         if (!cancelled) setState('error');
       }
@@ -911,7 +911,7 @@ function BookCover({ book }: { book: Book }) {
           src={src}
           alt={`Cover of ${book.title}`}
           style={{
-            width: '100%', height: '100%', objectFit: 'cover',
+            width: '100%', height: '100%', objectFit: 'contain',
             display: state === 'loaded' ? 'block' : 'none',
           }}
         />

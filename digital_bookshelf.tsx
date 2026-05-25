@@ -46,7 +46,7 @@ const BOOKS: Book[] = RAW_BOOKS.map(book => ({
 // --- COVER ART CACHE & COLOR CACHE ---
 export const coverCache = new Map<string, string>();
 const colorCache = new Map<string, string>();
-const aspectRatioCache = new Map<string, number>();
+export const aspectRatioCache = new Map<string, number>();
 export const fetchingSet = new Set<string>();
 
 const colorStore = {
@@ -464,6 +464,7 @@ export default function App() {
   const bookElRef = useRef<HTMLDivElement | null>(null);
   const navTargetRef = useRef<Book | null>(null);
   const navExitYRef = useRef(0);
+  const navExitRectRef = useRef<DOMRect | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   const handleSelect = (book: Book, e: React.MouseEvent) => {
@@ -497,6 +498,7 @@ export default function App() {
     }
 
     navTargetRef.current = nextBook;
+    navExitRectRef.current = shelfRefs.current[selectedBook.id]!.getBoundingClientRect();
     setOriginRect(shelfRefs.current[nextBook.id]!.getBoundingClientRect());
     setNavBook(selectedBook);
     setNavDir(direction);
@@ -639,37 +641,39 @@ export default function App() {
   };
 
   const getExitInitStyle = () => {
-    if (!originRect) return {};
+    if (!navExitRectRef.current) return {};
+    const exitRect = navExitRectRef.current;
     const isM = window.innerWidth < 768;
     const ts = isM ? 1.45 : 1.65;
     if (isM) {
-      const halfH = (originRect.height * ts) / 2;
+      const halfH = (exitRect.height * ts) / 2;
       const topPx = Math.min(halfH + 80, window.innerHeight * 0.38);
       const cx = window.innerWidth * 0.5;
       return {
-        width: originRect.width,
-        height: originRect.height,
+        width: exitRect.width,
+        height: exitRect.height,
         transform: `translate(${cx}px, ${topPx}px) translate(-50%, -50%) scale(${ts})`,
       } as React.CSSProperties;
     }
     const cx = window.innerWidth * 0.28;
     const cy = window.innerHeight * 0.5;
     return {
-      width: originRect.width,
-      height: originRect.height,
+      width: exitRect.width,
+      height: exitRect.height,
       transform: `translate(${cx}px, ${cy}px) translate(-50%, -50%) scale(1.65)`,
     } as React.CSSProperties;
   };
 
   const getExitStyle = () => {
-    if (!navBook || !originRect) return {};
+    if (!navBook || !navExitRectRef.current) return {};
+    const exitRect = navExitRectRef.current;
     const isM = window.innerWidth < 768;
     const dist = isM ? window.innerWidth * 1.5 : window.innerWidth * 1.5;
     const offX = navDir === 'next' ? -dist : dist;
     const yPos = isM ? navExitYRef.current : window.innerHeight * 0.5;
     return {
-      width: originRect.width,
-      height: originRect.height,
+      width: exitRect.width,
+      height: exitRect.height,
       transform: `translate(${offX}px, ${yPos}px) translate(-50%, -50%) scale(0.8)`,
     } as React.CSSProperties;
   };
@@ -689,6 +693,36 @@ export default function App() {
       transform: `translate(${fromX}px, ${yPos}px) translate(-50%, -50%) scale(${ts})`,
       transition: 'none',
     } as React.CSSProperties;
+  };
+
+  const getNavArrowStyle = (dir: 'prev' | 'next'): React.CSSProperties => {
+    if (!originRect) return {};
+    const isM = window.innerWidth < 768;
+    const ts = isM ? 1.45 : 1.65;
+    const cx = isM ? window.innerWidth * 0.5 : window.innerWidth * 0.28;
+    const cy = isM
+      ? Math.min((originRect.height * ts) / 2 + 80, window.innerHeight * 0.38)
+      : window.innerHeight * 0.5;
+    const bookHalfW = (originRect.width * ts) / 2;
+    const gap = 16;
+    const btnW = 44;
+
+    if (dir === 'prev') {
+      return {
+        position: 'fixed',
+        left: cx - bookHalfW - gap - btnW,
+        top: cy,
+        transform: 'translateY(-50%)',
+        zIndex: 60,
+      };
+    }
+    return {
+      position: 'fixed',
+      left: cx + bookHalfW + gap,
+      top: cy,
+      transform: 'translateY(-50%)',
+      zIndex: 60,
+    };
   };
 
   const mb = window.innerWidth < 768;
@@ -1039,28 +1073,36 @@ export default function App() {
             </div>
           </div>
 
-          <div className={`absolute top-6 right-6 md:top-10 md:right-10 z-[60] flex space-x-2 transition-opacity duration-300 pointer-events-auto ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}>
-            <button
-              onClick={() => navigateBooks('prev')}
-              disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === 0}
-              className="p-3 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-sm"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => navigateBooks('next')}
-              disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === BOOKS.length - 1}
-              className="p-3 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-sm"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
+          <div className={`absolute top-6 right-6 md:top-10 md:right-10 z-[60] transition-opacity duration-300 pointer-events-auto ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}>
             <button
               onClick={handleClose}
-              className="p-3 rounded-full hover:bg-gray-100 transition-colors text-gray-800 ml-2 bg-white/80 backdrop-blur-sm shadow-sm"
+              className="p-3 rounded-full hover:bg-gray-100 transition-colors text-gray-800 bg-white/80 backdrop-blur-sm shadow-sm"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Nav arrows flanking the book cover */}
+          {originRect && selectedBook && animState === 'open' && (
+            <>
+              <button
+                onClick={() => navigateBooks('prev')}
+                disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === 0}
+                style={getNavArrowStyle('prev')}
+                className="fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-sm hover:bg-gray-100 shadow-sm"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => navigateBooks('next')}
+                disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === BOOKS.length - 1}
+                style={getNavArrowStyle('next')}
+                className="fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-sm hover:bg-gray-100 shadow-sm"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
 
         </div>
       )}
