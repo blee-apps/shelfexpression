@@ -15,6 +15,7 @@ const synopsisCache = new Map<string, string>();
 const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
 const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+if (import.meta.env.DEV && geminiKey) console.log('[UpdateTool] Gemini key loaded, prefix:', geminiKey.slice(0, 6) + '...');
 
 export default function UpdateTool({ onClose, books }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
@@ -342,10 +343,10 @@ export default function UpdateTool({ onClose, books }: Props) {
     setSummarizing(true);
     try {
       const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `Summarize this book synopsis in 2-3 concise sentences, keeping the key details and tone:\n\n${editSynopsis}` }] }],
           }),
