@@ -123,22 +123,23 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
   try {
     let url: string | null = null;
 
-    let res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`);
-    if (res.status !== 429) {
-      const gData = await res.json();
-      url = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
-    }
+    // OpenLibrary first (free, no rate limit)
+    let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
+    const olData = await res.json();
+    const coverI = olData.docs?.[0]?.cover_i;
+    if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
+    else if (book.isbn) url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
+    else url = null;
 
+    // Google Books fallback only if OpenLibrary returned nothing
     if (!url) {
-      res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-      const olData = await res.json();
-      const coverI = olData.docs?.[0]?.cover_i;
-      if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
-      else url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
-    }
-
-    if (url?.includes('googleapis')) {
-      url = url.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
+      url = null;
+      res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`);
+      if (res.status !== 429) {
+        const gData = await res.json();
+        const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+        if (thumb) url = thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
+      }
     }
 
     if (!url) {
