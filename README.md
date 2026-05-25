@@ -8,13 +8,13 @@ A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and 
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
 - **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view. Swipe is throttled with distance (≥40px) and time (200–800ms) gates to prevent accidental triggers.
-- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses with the **Summarize with Gemini** button (when `VITE_GEMINI_API_KEY` is set), and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
+- **Secret admin tool** — press `Ctrl+Shift+U` to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses with the **Summarize with Gemini** button (when `VITE_GEMINI_API_KEY` is set), and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
 
 ## Shelf Design Options
 
 The application offers two distinct, high-fidelity aesthetic presentation styles, which can be easily toggled near the top of [`digital_bookshelf.tsx`](digital_bookshelf.tsx) using the `USE_VITSOE_SHELF` flag:
 
-- **Vitsoe 606 Shelf Mode** (`USE_VITSOE_SHELF = true`): Mimics a real-life physical shelving unit. Features warm birch wood shelf boards with multi-tone grain gradients, wall-mounted aluminum upright rails with slotted standard tracks, brushed metal brackets, ambient lighting occlusion, and realistic book drop shadows. Hovering a book lifts it forward and upwards (using `origin-bottom`) to keep its base perfectly flush with the shelving surface rather than clipping through it.
+- **Vitsoe 606 Shelf Mode** (`USE_VITSOE_SHELF = true`): Mimics a real-life physical shelving unit. Features warm birch wood shelf boards with multi-tone grain gradients, wall-mounted aluminum upright rails with slotted standard tracks, brushed metal brackets, ambient lighting occlusion, and realistic book drop shadows. Hovering a book simulates picking it off the shelf — it tilts at a random angle (±7°), lifts 20% upward, and scales 1.08× with a deeper shadow. The base stays flush with the shelf surface via `origin-bottom`.
 - **Minimalist Gallery Mode** (`USE_VITSOE_SHELF = false`): A sleek, clean, distraction-free modern look where book covers hover gracefully over a pure, flat background with tight responsive spacing.
 
 *Note: The **Secret Admin Tool** contains a toggle checkbox for this feature. When you click **Generate**, it automatically packs your selected shelf design preference into the generated code payload to easily copy-paste into `digital_bookshelf.tsx` alongside the updated book list.*
@@ -42,7 +42,7 @@ const RAW_BOOKS = [
 | `synopsis` | Short description shown in the detail panel. |
 | `gr` | Goodreads book ID (used for the "View on Goodreads" link). |
 
-**Tip:** Use the admin tool (`Shift+Cmd+U`) to edit books, search OpenLibrary, and generate the `RAW_BOOKS` code automatically.
+**Tip:** Use the admin tool (`Ctrl+Shift+U`) to edit books, search OpenLibrary, and generate the `RAW_BOOKS` code automatically.
 
 ### 2. Customize styling
 
@@ -96,7 +96,12 @@ UpdateTool.html         — Standalone reference for the admin tool (not used at
 - **Single file app** — `digital_bookshelf.tsx` contains all state, rendering, caching, and hooks. This was intentional for simplicity and easy copying into a new project.
 - **Shared cover cache** — `coverCache` and `colorCache` are module-level Maps exported from `digital_bookshelf.tsx`, so the admin tool's `BookCover` component reads from the same cache instead of making duplicate fetch requests.
 - **Google Books as last resort** — OpenLibrary search (unthrottled) is tried first for both covers and synopses. Google Books is only queried when OpenLibrary returns nothing, avoiding unnecessary 429s. An optional `VITE_GOOGLE_BOOKS_API_KEY` env var authenticates requests when higher rate limits are needed.
-- **CSS transition animation** — the click-to-detail animation uses CSS transitions on `top`, `left`, `transform`, and `opacity`. The flying book's base size is set from the grid item's `originRect`, so it always lands back at the exact same pixel size with no pop.
+- **CSS transition animation** — the click-to-detail animation uses CSS transitions on `top`, `left`, `transform`, and `opacity`. The flying book's base size is set from the grid item's `originRect`, so it always lands back at the exact same pixel size with no pop. Prev/next arrows flank the flying book rather than sitting in a top-right button bar.
+- **Navigation exit uses exiting book's own dimensions** — `navExitRectRef` preserves the leaving book's grid rect so the exit container matches the correct aspect ratio, preventing warping during the exit animation.
+- **Dynamic cover aspect ratio** — cover aspect ratio is determined by the actual downloaded image, not hardcoded to 2:3. Validated via `Image()` load and stored in a module-level `aspectRatioCache`.
+- **Blob URL image cache** — validated cover images are drawn to a canvas and stored as blob URLs (`URL.createObjectURL`). Every `<img>` element resolves from memory instantly, eliminating re-download flashes during navigation.
+- **Robust API fallback** — each external API (OpenLibrary search, Google Books) is wrapped in its own try-catch. If OpenLibrary returns a 500 or CORS error, the code falls through to Google Books instead of skipping the entire fetch.
+- **Mobile swipe-down close** — swipe-down on the detail view clears the inline hover transform before running the closing animation, preventing the grid book from appearing tilted after returning to the shelf.
 - **Loading screen** — the app waits for all cover images to load (or fail) and for dominant colors to be extracted before revealing the grid. A progress bar gives visual feedback.
 
 ## Dependencies
