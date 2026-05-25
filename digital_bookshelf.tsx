@@ -286,7 +286,7 @@ const DynamicCover = ({ book }: { book: Book }) => {
 // --- SHELF STRUCTURE (Vitsoe 606-style, purely decorative) ---
 
 // Measures the books grid rows and the grid's own offsetTop from its parent
-const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>) => {
+const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>, animState: string) => {
   const [state, setState] = useState<{
     rows: { top: number; bottom: number }[];
     gridOffsetTop: number;
@@ -295,6 +295,7 @@ const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>) => {
 
   useEffect(() => {
     const compute = () => {
+      if (animState !== 'idle') return;
       const grid = gridRef.current;
       if (!grid) return;
       const children = Array.from(grid.children) as HTMLElement[];
@@ -337,13 +338,13 @@ const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>) => {
       ro.disconnect();
       window.removeEventListener('scroll', compute);
     };
-  }, [gridRef]);
+  }, [gridRef, animState]);
 
   return state;
 };
 
-const ShelfStructure = ({ gridRef }: { gridRef: React.RefObject<HTMLDivElement | null> }) => {
-  const { rows, gridOffsetTop, gridHeight } = useShelfRows(gridRef);
+const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLDivElement | null>; animState: string }) => {
+  const { rows, gridOffsetTop, gridHeight } = useShelfRows(gridRef, animState);
 
   if (rows.length === 0) return null;
 
@@ -936,7 +937,7 @@ export default function App() {
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
         <div className="flex-1 flex flex-col w-full relative py-4 md:py-6">
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
-          {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} />}
+          {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
           <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full relative"} style={{ zIndex: 4 }}>
