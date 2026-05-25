@@ -18,7 +18,7 @@ const RAW_BOOKS = [
   { id: '12', isbn: '123163147', title: "The Future", author: 'Naomi Alderman', year: 2023, synopsis: "A handful of friends plot a daring heist to save the world from the tech billionaires who are intent on surviving the apocalypse in their private bunkers.", gr: '123163147' },
 ];
 
-export const USE_VITSOE_SHELF = true;
+export const USE_VITSOE_SHELF = false;
 
 export interface Book {
   id: string; isbn: string; title: string; author: string;
@@ -1081,7 +1081,7 @@ export default function App() {
                 transition: `transform 1.2s cubic-bezier(${navDir === 'next' ? '0.4, 0, 0.7, 1' : '0.2, 0.8, 0.2, 1'})`,
               } as React.CSSProperties}
             >
-              <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
+              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-sm overflow-hidden">
                 <DynamicCover book={navBook} />
               </div>
             </div>
@@ -1097,7 +1097,7 @@ export default function App() {
                 transition: `transform ${animState === 'closing' ? '0.55s' : '1.2s'} cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.08s ease-out`,
               } as React.CSSProperties}
             >
-              <div className="absolute inset-0 shadow-2xl rounded-sm overflow-hidden">
+              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-sm overflow-hidden">
                 <DynamicCover book={selectedBook} />
               </div>
             </div>
