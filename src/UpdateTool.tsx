@@ -887,13 +887,25 @@ function BookCover({ book }: { book: Book }) {
 
       // Validate image (reject 1x1 placeholder)
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       try {
         await new Promise<void>((resolve, reject) => {
           img.onload = () => (img.width > 1 ? resolve() : reject());
           img.onerror = reject;
           img.src = url!;
         });
-        if (!cancelled) { setSrc(url); setState('loaded'); coverCache.set(book.id, url); aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight); }
+        if (!cancelled) {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          c.getContext('2d')!.drawImage(img, 0, 0);
+          const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+          const objectUrl = blob ? URL.createObjectURL(blob) : url;
+          setSrc(objectUrl);
+          setState('loaded');
+          coverCache.set(book.id, objectUrl);
+          aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
+        }
       } catch {
         if (!cancelled) setState('error');
       }

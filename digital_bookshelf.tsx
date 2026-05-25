@@ -38,6 +38,8 @@ const getThicknessMult = (str: string) => {
   return 1.0 + (Math.abs(hash) % 50) / 100;
 };
 
+
+
 const BOOKS: Book[] = RAW_BOOKS.map(book => ({
   ...book,
   mult: getThicknessMult(book.title)
@@ -153,6 +155,7 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     }
 
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     await new Promise<void>((resolve, reject) => {
       img.onload = () => { if (img.width > 1) resolve(); else reject(); };
       img.onerror = reject;
@@ -160,7 +163,16 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     });
 
     aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
-    coverCache.set(book.id, url);
+
+    // Convert to an object URL so new img elements resolve from memory instantly
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext('2d')!.drawImage(img, 0, 0);
+    const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+    const objectUrl = blob ? URL.createObjectURL(blob) : url;
+    coverCache.set(book.id, objectUrl);
+
     colorCache.set(book.id, getColorForString(book.title));
     let color = await extractDominantColor(url);
     if (color) {
@@ -169,7 +181,7 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     fetchingSet.delete(book.id);
     colorStore.notify();
 
-    return { url, color: colorCache.get(book.id)! };
+    return { url: objectUrl, color: colorCache.get(book.id)! };
   } catch {
     fetchingSet.delete(book.id);
     if (!colorCache.has(book.id)) {
@@ -755,6 +767,23 @@ export default function App() {
 
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
+        /* Book hover effect — simulates picking a book off the shelf */
+        .vitsoe-book-wrapper {
+          position: relative;
+        }
+        .vitsoe-book-wrapper::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: -50%;
+          height: 50%;
+          pointer-events: auto;
+        }
+        .book-hover-vitsoe {
+          will-change: transform;
+        }
+
         /* Wall background: warm linen with subtle vignette */
         .shelf-wall {
           background-color: #F5F0EB;
@@ -989,13 +1018,48 @@ export default function App() {
           <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {BOOKS.map((book) => {
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
-              return (
+              return USE_VITSOE_SHELF ? (
+                <div
+                  key={book.id}
+                  className="vitsoe-book-wrapper cursor-pointer"
+                  onClick={(e) => handleSelect(book, e)}
+                  onMouseEnter={(e) => {
+                    const bookEl = e.currentTarget.firstElementChild as HTMLElement;
+                    if (!bookEl) return;
+                    const angle = (Math.random() * 14) - 7;
+                    bookEl.style.setProperty('--tilt-angle', `${angle}deg`);
+                    bookEl.style.zIndex = '99';
+                    bookEl.style.transform = `translateY(-20%) rotate(${angle}deg) scale(1.08)`;
+                    bookEl.style.boxShadow = '0 12px 28px rgba(0,0,0,0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    const bookEl = e.currentTarget.firstElementChild as HTMLElement;
+                    if (!bookEl) return;
+                    bookEl.style.removeProperty('--tilt-angle');
+                    bookEl.style.zIndex = '';
+                    bookEl.style.transform = '';
+                    bookEl.style.boxShadow = '';
+                  }}
+                >
+                  <div
+                    ref={el => shelfRefs.current[book.id] = el}
+                    className={`relative overflow-hidden rounded-sm pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)] book-hover-vitsoe`}
+                    style={{
+                      transition: closingFade
+                        ? 'opacity 0s'
+                        : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s ease-out, opacity 0.3s ease-out',
+                    } as React.CSSProperties}
+                  >
+                    <DynamicCover book={book} />
+                  </div>
+                </div>
+              ) : (
                 <div
                   key={book.id}
                   ref={el => shelfRefs.current[book.id] = el}
                   onClick={(e) => handleSelect(book, e)}
-                  className={`relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]`}
-                  style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' }}
+                  className={`relative overflow-hidden rounded-sm cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)] hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out`}
+                  style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' } as React.CSSProperties}
                 >
                   <DynamicCover book={book} />
                 </div>
