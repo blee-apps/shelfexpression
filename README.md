@@ -61,7 +61,7 @@ The app works without any API keys — OpenLibrary (unthrottled) is the primary 
 | Variable | Purpose |
 |----------|---------|
 | `VITE_GOOGLE_BOOKS_API_KEY` | Lifts rate limits on Google Books cover/synopsis fallback |
-| `VITE_GEMINI_API_KEY` | Enables the **Summarize with Gemini** button in the admin tool, which condenses long synopses to 2–3 sentences via Gemini 2.0 Flash Lite. Get a free key at [aistudio.google.com](https://aistudio.google.com/apikey) (60 req/min, no credit card). |
+| `VITE_GEMINI_API_KEY` | Enables the **Summarize with Gemini** button in the admin tool, which condenses long synopses to 2–3 sentences via Gemini 2.5 Flash Lite. Generate a key at [aistudio.google.com](https://aistudio.google.com/apikey) (free tier available — rate-limited, no credit card required). |
 
 For Vercel, add these in **Settings → Environment Variables**. For local development, create a `.env` file:
 
