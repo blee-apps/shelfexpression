@@ -118,6 +118,9 @@ const extractDominantColor = (url: string): Promise<string | null> => {
   });
 };
 
+const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
+const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
+
 const fetchCover = async (book: Book): Promise<{ url: string | null; color: string | null }> => {
   fetchingSet.add(book.id);
   try {
@@ -134,7 +137,7 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     // Google Books fallback only if OpenLibrary returned nothing
     if (!url) {
       url = null;
-      res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`);
+      res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
       if (res.status !== 429) {
         const gData = await res.json();
         const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;

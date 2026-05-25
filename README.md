@@ -1,14 +1,14 @@
 # Bookshelf
 
-A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and Vite. Displays a curated reading list (up to 20 books) as a grid of book covers — with an animated detail view for each book.
+A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and Vite. Displays a curated reading list (up to 20 books) as a Vitsoe-style shelf grid of book covers — with an animated detail view for each book.
 
 ## Features
 
-- **Cover grid** — responsive 4-column (desktop) / 2-column (mobile) grid of book covers with cover art fetched from OpenLibrary, with Google Books API as a fallback (skipped on 429 rate-limit). Rejects 1×1 placeholder images.
+- **Cover grid** — responsive 4-column (desktop) / 2-column (mobile) grid of book covers with cover art fetched from OpenLibrary (primary) and the Google Books API as a fallback. Rejects 1×1 placeholder images.
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
-- **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view.
-- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
+- **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view. Swipe is throttled with distance (≥40px) and time (200–800ms) gates to prevent accidental triggers.
+- **Secret admin tool** — press `Shift+Cmd+U` (Mac) or `Shift+Ctrl+U` (Windows/Linux) to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), and generating the updated `RAW_BOOKS` array. Supports file upload and drag-and-drop reordering.
 
 ## Shelf Design Options
 
@@ -54,7 +54,17 @@ const RAW_BOOKS = [
 - The page subtitle (`The {BOOKS.length} best books I've read recently.`) updates dynamically based on the number of books in `RAW_BOOKS`.
 - Header links and site references point to `sangsara.net` throughout the JSX; replace them with your own domain in the `<header>` section and anywhere else they appear.
 
-### 3. Build and deploy
+### 3. (Optional) Google Books API key
+
+If you're hitting Google Books rate limits (429 errors), set a Google Books API key via the `VITE_GOOGLE_BOOKS_API_KEY` environment variable. The app works without it — OpenLibrary is the primary cover/synopsis source — but the key lifts the rate limit for the Google Books fallback.
+
+For Vercel, add `VITE_GOOGLE_BOOKS_API_KEY` in your project's **Settings → Environment Variables**. For local development, create a `.env` file:
+
+```
+VITE_GOOGLE_BOOKS_API_KEY=your_api_key_here
+```
+
+### 4. Build and deploy
 
 ```bash
 npm install
@@ -78,7 +88,8 @@ UpdateTool.html         — Standalone reference for the admin tool (not used at
 ### Key design decisions
 
 - **Single file app** — `digital_bookshelf.tsx` contains all state, rendering, caching, and hooks. This was intentional for simplicity and easy copying into a new project.
-- **Cover cache** — `coverCache` and `colorCache` are module-level Maps, persisted across renders. A `colorStore` notifies subscribers when cover colors finish extracting, and `useBookCover` subscribes to it to reactively update when a fetch completes.
+- **Shared cover cache** — `coverCache` and `colorCache` are module-level Maps exported from `digital_bookshelf.tsx`, so the admin tool's `BookCover` component reads from the same cache instead of making duplicate fetch requests.
+- **Google Books as last resort** — OpenLibrary search (unthrottled) is tried first for both covers and synopses. Google Books is only queried when OpenLibrary returns nothing, avoiding unnecessary 429s. An optional `VITE_GOOGLE_BOOKS_API_KEY` env var authenticates requests when higher rate limits are needed.
 - **CSS transition animation** — the click-to-detail animation uses CSS transitions on `top`, `left`, `transform`, and `opacity`. The flying book's base size is set from the grid item's `originRect`, so it always lands back at the exact same pixel size with no pop.
 - **Loading screen** — the app waits for all cover images to load (or fail) and for dominant colors to be extracted before revealing the grid. A progress bar gives visual feedback.
 

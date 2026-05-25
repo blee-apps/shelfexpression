@@ -12,6 +12,8 @@ const SLOT_COUNT = 20;
 const escDq = (s: string) => s.replace(/"/g, '\\"');
 const escSq = (s: string) => s.replace(/'/g, "\\'");
 const synopsisCache = new Map<string, string>();
+const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
+const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
 
 export default function UpdateTool({ onClose, books }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
@@ -324,7 +326,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     if (cached !== undefined) return cached;
     try {
       const q = `intitle:${encodeURIComponent(title)}+inauthor:${encodeURIComponent(author)}`;
-      const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&fields=items(volumeInfo(description))`);
+      const r = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=${q}&fields=items(volumeInfo(description))`));
       if (r.status === 429) return ''; // rate limited
       const data = await r.json();
       const desc = data?.items?.[0]?.volumeInfo?.description || '';
