@@ -374,10 +374,10 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
         top: gridOffsetTop - PAD,
         left: -PAD,
         right: -PAD,
-        bottom: -32, // uprights extend to browser bottom
+        bottom: 0,
         pointerEvents: 'none',
         zIndex: 0,
-        overflow: 'visible',
+        overflow: 'clip',
       }}
       aria-hidden="true"
     >
@@ -1002,12 +1002,12 @@ export default function App() {
         </div>
 
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
-        <div className="flex-1 flex flex-col w-full relative pt-4 md:pt-6 pb-2 md:pb-4">
+        <div className="flex flex-col w-full relative pt-4 md:pt-6 pb-10 md:pb-12">
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
           {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative overflow-clip" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {BOOKS.map((book) => {
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
