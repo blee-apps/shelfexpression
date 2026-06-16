@@ -1,6 +1,7 @@
 export interface Book {
   id: string; isbn: string; title: string; author: string;
   year: number; synopsis: string; gr: string; mult: number;
+  coverUrl?: string;
 }
 
 export const RAW_BOOKS = [

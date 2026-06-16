@@ -42,6 +42,8 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [synopsisOptions, setSynopsisOptions] = useState<string[]>([]);
   const [synopsisIndex, setSynopsisIndex] = useState(0);
   const [summarizing, setSummarizing] = useState(false);
+  const [coverOptions, setCoverOptions] = useState<{ url: string; label: string }[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
 
   // OpenRouter model state
   const [models, setModels] = useState<{ id: string; name: string; free: boolean }[]>([]);
@@ -121,6 +123,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         synopsis: getStr('synopsis'),
         gr: getStr('gr'),
         mult: 1.0,
+        coverUrl: getStr('coverUrl') || undefined,
       };
     });
   };
@@ -194,6 +197,53 @@ export default function UpdateTool({ onClose, books }: Props) {
     showToast(`Moved book #${from + 1} to #${to + 1}.`);
   };
 
+  const populateCoverOptions = async (book: { title?: string; author?: string; isbn?: string } | null, extraCoverId?: number) => {
+    const coverSources: { url: string; label: string }[] = [];
+
+    if (extraCoverId) {
+      coverSources.push({ url: `https://covers.openlibrary.org/b/id/${extraCoverId}-L.jpg`, label: 'OpenLibrary' });
+    }
+    if (book?.isbn) {
+      coverSources.push({ url: `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`, label: 'OpenLibrary (ISBN)' });
+    }
+    if (book?.isbn) {
+      coverSources.push({ url: `https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg`, label: 'Goodreads' });
+    }
+    if (gbKey && (book?.title || book?.author)) {
+      try {
+        const q = `${book?.title || ''} ${book?.author || ''}`.trim();
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&key=${gbKey}&maxResults=1`);
+        const data = await res.json();
+        const thumb = data.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+        if (thumb) {
+          coverSources.push({ url: thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:'), label: 'Google Books' });
+        }
+      } catch {}
+    }
+
+    const validCovers: { url: string; label: string }[] = [];
+    let fallback: { url: string; label: string } | null = null;
+    for (const src of coverSources) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      try {
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = src.url;
+        });
+      } catch { continue; }
+      if (img.naturalHeight >= 300) {
+        validCovers.push(src);
+      } else if (!fallback) {
+        fallback = src;
+      }
+    }
+    if (validCovers.length === 0 && fallback) validCovers.push(fallback);
+    setCoverOptions(validCovers);
+    setCoverIndex(0);
+  };
+
   const openEdit = (index: number) => {
     setEditingIndex(index);
     const book = slots[index];
@@ -211,6 +261,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     setSearchResults([]);
     setGrUrl('');
     setGrLookupStatus('');
+    populateCoverOptions(book);
   };
 
   const saveEdit = () => {
@@ -230,6 +281,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         synopsis: editSynopsis.trim(),
         gr: editGr.trim(),
         mult: 1.0,
+        coverUrl: coverOptions[coverIndex]?.url || '',
       };
       return next;
     });
@@ -353,7 +405,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orKey}` },
         body: JSON.stringify({
           model: selectedModel,
-          messages: [{ role: 'user', content: `Summarize this book synopsis in 2-3 concise sentences, keeping the key details and tone:\n\n${editSynopsis}` }],
+          messages: [{ role: 'user', content: `Summarize this book synopsis in 2-3 short, punchy sentences. Keep it tight — avoid long clauses, elaborate phrasing, and unnecessary detail. Preserve the key details and tone:\n\n${editSynopsis}` }],
         }),
       });
       if (!r.ok) {
@@ -422,6 +474,8 @@ export default function UpdateTool({ onClose, books }: Props) {
       setEditSynopsis('');
     }
 
+    populateCoverOptions({ title: doc.title || '', author: doc.author_name?.[0] || '', isbn }, doc.cover_i);
+
     setSearchStatus('Book details filled from selection.');
     showToast('Book data loaded from OpenLibrary.');
   };
@@ -485,9 +539,13 @@ export default function UpdateTool({ onClose, books }: Props) {
       showToast('No books to encode.');
       return;
     }
-    const lines = filled.map((book, i) =>
-      `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}' }`
-    );
+    const lines = filled.map((book, i) => {
+      const base = `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}'`;
+      if (book.coverUrl) {
+        return base + `, coverUrl: '${escSq(book.coverUrl)}' }`;
+      }
+      return base + ' }';
+    });
     const code = 'const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];\n\nexport const USE_VITSOE_SHELF = ' + useVitsoeShelf + ';';
     setGeneratedCode(code);
     showToast(`Code generated (${filled.length} books).`);
@@ -823,6 +881,45 @@ export default function UpdateTool({ onClose, books }: Props) {
               </div>
               {grLookupStatus && <div style={{ fontSize: '0.72rem', color: '#888', marginTop: 4 }}>{grLookupStatus}</div>}
 
+              <label style={labelStyle}>Book Cover</label>
+              {coverOptions.length > 0 ? (
+                <div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+                    {coverOptions.length > 1 && (
+                      <button onClick={() => {
+                        const idx = coverIndex > 0 ? coverIndex - 1 : coverOptions.length - 1;
+                        setCoverIndex(idx);
+                      }} style={{ ...btnStyle({ secondary: true, small: true }), flexShrink: 0 }}>
+                        <ChevronLeft size={14} />
+                      </button>
+                    )}
+                    <img src={coverOptions[coverIndex]?.url || ''} alt=""
+                      style={{ width: 100, height: 'auto', borderRadius: 4, background: '#f0f0f0', objectFit: 'contain', border: '1px solid #eee' }}
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3'; }} />
+                    {coverOptions.length > 1 && (
+                      <button onClick={() => {
+                        const idx = coverIndex < coverOptions.length - 1 ? coverIndex + 1 : 0;
+                        setCoverIndex(idx);
+                      }} style={{ ...btnStyle({ secondary: true, small: true }), flexShrink: 0 }}>
+                        <ChevronRight size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {coverOptions.length > 1 && (
+                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: 3, textAlign: 'center' }}>
+                      {coverOptions[coverIndex].label} &mdash; {coverIndex + 1} / {coverOptions.length}
+                    </div>
+                  )}
+                  {coverOptions.length === 1 && (
+                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: 3, textAlign: 'center' }}>
+                      {coverOptions[0].label}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.75rem', color: '#aaa', padding: '8px 0' }}>No cover options loaded. Search and select a book to populate cover options.</div>
+              )}
+
               <label style={labelStyle}>Synopsis</label>
               <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
                 {synopsisOptions.length > 1 && (
@@ -923,6 +1020,32 @@ function BookCover({ book }: { book: Book }) {
     }
 
     const tryCovers = async () => {
+      // If a coverUrl override is set, use it directly
+      if (book.coverUrl) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        try {
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = reject;
+            img.src = book.coverUrl!;
+          });
+          if (img.naturalHeight >= 300) {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+            const objectUrl = blob ? URL.createObjectURL(blob) : img.src;
+            setSrc(objectUrl);
+            setState('loaded');
+            coverCache.set(book.id, objectUrl);
+            aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
+            return;
+          }
+        } catch {}
+      }
+
       const candidates: string[] = [];
 
       // Check local cover manifest first

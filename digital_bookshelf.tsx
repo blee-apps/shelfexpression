@@ -109,6 +109,28 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     const local = coverManifest[book.id as keyof typeof coverManifest];
     const manifestPath = local ? (local as { path: string | null; aspectRatio: number | null }).path : null;
 
+    // If a coverUrl override is set, try it first
+    let overrideImg: HTMLImageElement | null = null;
+    if (book.coverUrl) {
+      try {
+        overrideImg = await loadImage(book.coverUrl);
+        if (overrideImg && overrideImg.naturalHeight < MIN_COVER_HEIGHT) overrideImg = null;
+      } catch { overrideImg = null; }
+    }
+    if (overrideImg) {
+      aspectRatioCache.set(book.id, overrideImg.naturalWidth / overrideImg.naturalHeight);
+      const c = document.createElement('canvas');
+      c.width = overrideImg.naturalWidth;
+      c.height = overrideImg.naturalHeight;
+      c.getContext('2d')!.drawImage(overrideImg, 0, 0);
+      const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+      const objectUrl = blob ? URL.createObjectURL(blob) : overrideImg.src;
+      coverCache.set(book.id, objectUrl);
+      fetchingSet.delete(book.id);
+      colorStore.notify();
+      return { url: objectUrl, color: null };
+    }
+
     // Collect candidate URLs (only when no manifest — avoids unnecessary API calls)
     const candidates: { url: string }[] = [];
 
