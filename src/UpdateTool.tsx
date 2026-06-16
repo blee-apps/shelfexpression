@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
-import { Book, coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
+import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
+import { Book } from './books';
+import coverManifest from './generated/cover-manifest.json';
 
 interface Props {
   onClose: () => void;
@@ -647,6 +649,9 @@ export default function UpdateTool({ onClose, books }: Props) {
                   <div style={{ display: 'flex', gap: 5, marginTop: 'auto', paddingTop: 4 }}>
                     <button onClick={(e) => { e.stopPropagation(); openEdit(i); }} style={btnStyle({ secondary: true, small: true })}>Edit</button>
                     <button onClick={(e) => { e.stopPropagation(); removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
+                    {i > 0 && (
+                      <button onClick={(e) => { e.stopPropagation(); moveBook(i, 0); }} style={btnStyle({ secondary: true, small: true })} title="Move to top">↑</button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -865,6 +870,10 @@ function BookCover({ book }: { book: Book }) {
     const tryCovers = async () => {
       let url: string | null = null;
 
+      // Check local cover manifest first
+      const local = coverManifest[book.id as keyof typeof coverManifest];
+      if (local) url = (local as { path: string | null }).path;
+
       // 1. OpenLibrary search by title+author
       if (!url) {
         try {
@@ -875,7 +884,7 @@ function BookCover({ book }: { book: Book }) {
         } catch {}
       }
 
-      // 3. OpenLibrary ISBN direct (fallback)
+      // 2. OpenLibrary ISBN direct (fallback)
       if (!url && book.isbn) {
         url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
       }

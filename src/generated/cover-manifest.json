@@ -1,0 +1,50 @@
+{
+  "1": {
+    "path": "/covers/1.jpg",
+    "aspectRatio": 0.616
+  },
+  "2": {
+    "path": "/covers/2.jpg",
+    "aspectRatio": 0.678
+  },
+  "3": {
+    "path": "/covers/3.jpg",
+    "aspectRatio": 0.618
+  },
+  "4": {
+    "path": "/covers/4.jpg",
+    "aspectRatio": 0.64
+  },
+  "5": {
+    "path": "/covers/5.jpg",
+    "aspectRatio": 0.6525
+  },
+  "6": {
+    "path": "/covers/6.jpg",
+    "aspectRatio": 0.654
+  },
+  "7": {
+    "path": "/covers/7.jpg",
+    "aspectRatio": 0.6479481641468683
+  },
+  "8": {
+    "path": "/covers/8.jpg",
+    "aspectRatio": 0.704
+  },
+  "9": {
+    "path": "/covers/9.jpg",
+    "aspectRatio": 0.714
+  },
+  "10": {
+    "path": "/covers/10.jpg",
+    "aspectRatio": 0.6
+  },
+  "11": {
+    "path": "/covers/11.jpg",
+    "aspectRatio": 0.662
+  },
+  "12": {
+    "path": "/covers/12.jpg",
+    "aspectRatio": 0.662
+  }
+}

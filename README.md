@@ -74,8 +74,12 @@ VITE_GEMINI_API_KEY=your_key_here
 
 ```bash
 npm install
-npm run build    # outputs to dist/
+npm run build    # prebuild step downloads covers, then outputs to dist/
 ```
+
+The `prebuild` script (`npm run download-covers`) fetches cover images from OpenLibrary (with Google Books fallback) and saves them to `public/covers/`, then generates `src/generated/cover-manifest.json`. At runtime the app serves covers from the same origin — zero API calls, no CORS issues, and the site works offline.
+
+Run `npm run download-covers` manually to refresh covers without a full build.
 
 The build produces a static site that can be served from any host (Netlify, Vercel, GitHub Pages, etc.).
 
@@ -84,10 +88,17 @@ The build produces a static site that can be served from any host (Netlify, Verc
 ```
 index.html              — Vite entrypoint
 src/
+  books.ts              — Book data (RAW_BOOKS) and type definition
   main.tsx              — React root mount
   index.css             — Tailwind directives
   UpdateTool.tsx        — Admin overlay component
+  generated/
+    cover-manifest.json — Pre-computed cover paths and aspect ratios (generated)
 digital_bookshelf.tsx   — Main app (all UI + logic in one file)
+scripts/
+  download-covers.ts    — Build-time cover download script (run via prebuild)
+public/
+  covers/               — Downloaded cover images (generated)
 UpdateTool.html         — Standalone reference for the admin tool (not used at runtime)
 ```
 
@@ -98,6 +109,7 @@ UpdateTool.html         — Standalone reference for the admin tool (not used at
 - **Google Books as last resort** — OpenLibrary search (unthrottled) is tried first for both covers and synopses. Google Books is only queried when OpenLibrary returns nothing, avoiding unnecessary 429s. An optional `VITE_GOOGLE_BOOKS_API_KEY` env var authenticates requests when higher rate limits are needed.
 - **CSS transition animation** — the click-to-detail animation uses CSS transitions on `top`, `left`, `transform`, and `opacity`. The flying book's base size is set from the grid item's `originRect`, so it always lands back at the exact same pixel size with no pop. Prev/next arrows flank the flying book rather than sitting in a top-right button bar.
 - **Navigation exit uses exiting book's own dimensions** — `navExitRectRef` preserves the leaving book's grid rect so the exit container matches the correct aspect ratio, preventing warping during the exit animation.
+- **Build-time cover cache** — a `prebuild` script (`scripts/download-covers.ts`) fetches all cover images and pre-computes aspect ratios during build. Images are saved to `public/covers/` and served as static assets. The app checks `cover-manifest.json` first at runtime, skipping live API calls entirely for existing books. Covers not in the manifest (e.g., added later via the admin tool) still fall through to the live OpenLibrary/Google Books APIs. Stale cover images from removed books are automatically cleaned up on each build.
 - **Dynamic cover aspect ratio** — cover aspect ratio is determined by the actual downloaded image, not hardcoded to 2:3. Validated via `Image()` load and stored in a module-level `aspectRatioCache`.
 - **Blob URL image cache** — validated cover images are drawn to a canvas and stored as blob URLs (`URL.createObjectURL`). Every `<img>` element resolves from memory instantly, eliminating re-download flashes during navigation.
 - **Robust API fallback** — each external API (OpenLibrary search, Google Books) is wrapped in its own try-catch. If OpenLibrary returns a 500 or CORS error, the code falls through to Google Books instead of skipping the entire fetch.

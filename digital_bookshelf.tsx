@@ -1,29 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import UpdateTool from './src/UpdateTool';
+import { Book, BOOKS, RAW_BOOKS } from './src/books';
+import coverManifest from './src/generated/cover-manifest.json';
 
-// --- DATA SOURCE ---
-const RAW_BOOKS = [
-  { id: '1', isbn: '177148776', title: "It Lasts Forever and Then It's Over", author: 'Anne de Marcken', year: 2024, synopsis: "A haunting, spare novel about a zombie navigating the afterlife. It explores memory, loss, and the remnants of humanity in a beautifully decaying world.", gr: '177148776' },
-  { id: '2', isbn: '1555978401', title: "Lanny", author: 'Max Porter', year: 2019, synopsis: "In a village not far from London, Lanny is a boy who has a special connection to the woods. An enchanting, dark, and polyphonic fable about Englishness and childhood.", gr: '39738353' },
-  { id: '3', isbn: '0812550706', title: "Speaker for the Dead", author: 'Orson Scott Card', year: 1986, synopsis: "Three thousand years after the destruction of the bugger race, Ender Wiggin is still alive, traveling the stars as a Speaker for the Dead, seeking redemption.", gr: '7967' },
-  { id: '4', isbn: '123136728', title: "Orbital", author: 'Samantha Harvey', year: 2023, synopsis: "Six astronauts and cosmonauts rotate through the International Space Station. A compact, lyrical meditation on the Earth, space, and the fragility of human existence.", gr: '123136728' },
-  { id: '5', isbn: '203200544', title: "Perfection", author: 'Vincenzo Latronico', year: 2022, synopsis: "Millennial expat couple Anna and Tom are living the dream in Berlin, in a bright, plant-filled apartment. A sociological novel about the emptiness of contemporary existence.", gr: '203200544' },
-  { id: '6', isbn: '0374139946', title: "Dilla Time", author: 'Dan Charnas', year: 2022, synopsis: "The life and legacy of J Dilla, a musical genius who transformed the sound of popular music and invented a new rhythm that changed the way musicians play.", gr: '57693653' },
-  { id: '7', isbn: '0307946892', title: "Tigerman", author: 'Nick Harkaway', year: 2014, synopsis: "Sergeant Lester Ferris, a veteran of the Afghan war, serves on the island of Mancreu, a former British colony slated for destruction. He adopts a superhero persona to protect a local street kid.", gr: '19322249' },
-  { id: '8', isbn: '0812976711', title: "The Satanic Verses", author: 'Salman Rushdie', year: 1988, synopsis: "Just before dawn one winter's morning, a hijacked jumbo jet blows apart high above the English Channel. A magical realist epic about migration, faith, and transformation.", gr: '12781' },
-  { id: '9', isbn: '128533513', title: "Make Something Wonderful", author: 'Steve Jobs', year: 2023, synopsis: "A curated collection of Steve Jobs's speeches, interviews, and correspondence, offering an unparalleled window into how one of the world's most creative entrepreneurs approached his life and work.", gr: '128533513' },
-  { id: '10', isbn: '0995624233', title: "There Is No Antimemetics Division", author: 'qntm', year: 2020, synopsis: "An antimeme is an idea with self-censoring properties; an idea which, by its very nature, discourages or prevents people from spreading it. A sci-fi thriller about fighting an enemy you can't remember.", gr: '54870256' },
-  { id: '11', isbn: '75302296', title: "People Collide", author: 'Isle McElroy', year: 2023, synopsis: "A gender-bending, body-switching novel that explores marriage, identity, and sex, raising profound questions about the nature of true partnership.", gr: '75302296' },
-  { id: '12', isbn: '123163147', title: "The Future", author: 'Naomi Alderman', year: 2023, synopsis: "A handful of friends plot a daring heist to save the world from the tech billionaires who are intent on surviving the apocalypse in their private bunkers.", gr: '123163147' },
-];
+const UpdateTool = lazy(() => import('./src/UpdateTool'));
 
 export const USE_VITSOE_SHELF = true;
-
-export interface Book {
-  id: string; isbn: string; title: string; author: string;
-  year: number; synopsis: string; gr: string; mult: number;
-}
 
 // --- UTILITIES ---
 const getColorForString = (str: string) => {
@@ -31,19 +13,6 @@ const getColorForString = (str: string) => {
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return `hsl(${Math.abs(hash) % 360}, 40%, 26%)`;
 };
-
-const getThicknessMult = (str: string) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return 1.0 + (Math.abs(hash) % 50) / 100;
-};
-
-
-
-const BOOKS: Book[] = RAW_BOOKS.map(book => ({
-  ...book,
-  mult: getThicknessMult(book.title)
-}));
 
 // --- COVER ART CACHE & COLOR CACHE ---
 export const coverCache = new Map<string, string>();
@@ -129,27 +98,35 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
   try {
     let url: string | null = null;
 
-    // OpenLibrary first (free, no rate limit)
-    try {
-      let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-      const olData = await res.json();
-      const coverI = olData.docs?.[0]?.cover_i;
-      if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
-      else if (book.isbn) url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
-      else url = null;
-    } catch { url = null; }
+    // Check local cover manifest first (pre-downloaded at build time)
+    const local = coverManifest[book.id as keyof typeof coverManifest];
+    if (local) {
+      url = (local as { path: string | null; aspectRatio: number | null }).path;
+    }
 
-    // Google Books fallback only if OpenLibrary returned nothing
     if (!url) {
-      url = null;
+      // OpenLibrary first (free, no rate limit)
       try {
-        let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
-        if (res.status !== 429) {
-          const gData = await res.json();
-          const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
-          if (thumb) url = thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
-        }
+        let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
+        const olData = await res.json();
+        const coverI = olData.docs?.[0]?.cover_i;
+        if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
+        else if (book.isbn) url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
+        else url = null;
       } catch { url = null; }
+
+      // Google Books fallback only if OpenLibrary returned nothing
+      if (!url) {
+        url = null;
+        try {
+          let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
+          if (res.status !== 429) {
+            const gData = await res.json();
+            const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+            if (thumb) url = thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
+          }
+        } catch { url = null; }
+      }
     }
 
     if (!url) {
@@ -260,7 +237,11 @@ const useBookColor = (book: Book) => {
 
 const useBookAspectRatio = (book: Book) => {
   useSyncExternalStore(colorStore.subscribe, colorStore.getSnapshot);
-  return aspectRatioCache.get(book.id) || 2/3;
+  const cached = aspectRatioCache.get(book.id);
+  if (cached) return cached;
+  const local = coverManifest[book.id as keyof typeof coverManifest];
+  if (local) return (local as { aspectRatio: number | null }).aspectRatio || 2/3;
+  return 2/3;
 };
 
 // --- COMPONENTS ---
@@ -393,7 +374,7 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
         top: gridOffsetTop - PAD,
         left: -PAD,
         right: -PAD,
-        bottom: -32, // bleed past container padding to fill to page bottom
+        bottom: -32, // uprights extend to browser bottom
         pointerEvents: 'none',
         zIndex: 0,
         overflow: 'visible',
@@ -1021,7 +1002,7 @@ export default function App() {
         </div>
 
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
-        <div className="flex-1 flex flex-col w-full relative py-4 md:py-6">
+        <div className="flex-1 flex flex-col w-full relative pt-4 md:pt-6 pb-2 md:pb-4">
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
           {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
 
@@ -1181,7 +1162,9 @@ export default function App() {
 
         </div>
       )}
-      {showAdmin && <UpdateTool books={BOOKS} onClose={() => setShowAdmin(false)} />}
+      <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center text-white text-xl">Loading admin…</div>}>
+        {showAdmin && <UpdateTool books={BOOKS} onClose={() => setShowAdmin(false)} />}
+      </Suspense>
     </div>
   );
 }
