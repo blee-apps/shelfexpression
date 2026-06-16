@@ -463,6 +463,7 @@ export default function App() {
   const navExitYRef = useRef(0);
   const navExitRectRef = useRef<DOMRect | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const hoverTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const handleSelect = (book: Book, e: React.MouseEvent) => {
     if (animState !== 'idle') return;
@@ -610,6 +611,13 @@ export default function App() {
       el.removeEventListener('touchend', onEnd);
     };
   }, [animState, navPhase]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(hoverTimers.current).forEach(clearTimeout);
+      hoverTimers.current = {};
+    };
+  }, []);
 
   const getFlyingBookStyle = () => {
     if (!originRect || !selectedBook) return {};
@@ -762,15 +770,6 @@ export default function App() {
         /* Book hover effect — simulates picking a book off the shelf */
         .vitsoe-book-wrapper {
           position: relative;
-        }
-        .vitsoe-book-wrapper::after {
-          content: '';
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: -50%;
-          height: 50%;
-          pointer-events: auto;
         }
         .book-hover-vitsoe {
           will-change: transform;
@@ -1002,12 +1001,12 @@ export default function App() {
         </div>
 
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
-        <div className="flex flex-col w-full relative pt-4 md:pt-6 pb-10 md:pb-12">
+        <div className="flex-1 flex flex-col w-full relative pt-4 md:pt-6 pb-10 md:pb-12">
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
           {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative overflow-clip" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {BOOKS.map((book) => {
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
@@ -1016,6 +1015,8 @@ export default function App() {
                   className="vitsoe-book-wrapper cursor-pointer"
                   onClick={(e) => handleSelect(book, e)}
                   onMouseEnter={(e) => {
+                    const timer = hoverTimers.current[book.id];
+                    if (timer) { clearTimeout(timer); delete hoverTimers.current[book.id]; }
                     const bookEl = e.currentTarget.firstElementChild as HTMLElement;
                     if (!bookEl) return;
                     const angle = (Math.random() * 14) - 7;
@@ -1025,12 +1026,17 @@ export default function App() {
                     bookEl.style.boxShadow = '0 12px 28px rgba(0,0,0,0.35)';
                   }}
                   onMouseLeave={(e) => {
-                    const bookEl = e.currentTarget.firstElementChild as HTMLElement;
-                    if (!bookEl) return;
-                    bookEl.style.removeProperty('--tilt-angle');
-                    bookEl.style.zIndex = '';
-                    bookEl.style.transform = '';
-                    bookEl.style.boxShadow = '';
+                    const id = book.id;
+                    hoverTimers.current[id] = setTimeout(() => {
+                      const shelfEl = shelfRefs.current[id];
+                      if (shelfEl) {
+                        shelfEl.style.removeProperty('--tilt-angle');
+                        shelfEl.style.zIndex = '';
+                        shelfEl.style.transform = '';
+                        shelfEl.style.boxShadow = '';
+                      }
+                      delete hoverTimers.current[id];
+                    }, 150);
                   }}
                 >
                   <div
