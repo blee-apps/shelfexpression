@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, RAW_BOOKS } from './src/books';
+import { Book, BOOKS, RAW_BOOKS, USE_VITSOE_SHELF } from './src/books';
 import coverManifest from './src/generated/cover-manifest.json';
 
 const UpdateTool = lazy(() => import('./src/UpdateTool'));
 
-export const USE_VITSOE_SHELF = true;
 
 // --- UTILITIES ---
 const getColorForString = (str: string) => {

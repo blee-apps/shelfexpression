@@ -563,7 +563,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <label style={{ ...labelStyle, marginTop: 0 }}>
-              Upload <code>digital_bookshelf.tsx</code>
+              Upload <code>src/books.ts</code>
             </label>
             <input
               ref={fileInputRef}
@@ -586,7 +586,7 @@ export default function UpdateTool({ onClose, books }: Props) {
             <textarea
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
-              placeholder="Paste the RAW_BOOKS array from digital_bookshelf.tsx, starting at const RAW_BOOKS = [...]"
+              placeholder="Paste the RAW_BOOKS array from src/books.ts, starting at const RAW_BOOKS = [...]"
               style={{
                 width: '100%', height: 80, fontFamily: '"SF Mono", "Menlo", "Consolas", monospace',
                 fontSize: '0.75rem', padding: 8, border: '1px solid #ddd', borderRadius: 4,
@@ -683,7 +683,7 @@ export default function UpdateTool({ onClose, books }: Props) {
             }}
           />
           <div style={{ fontSize: '0.72rem', color: '#aaa', marginTop: 8 }}>
-            Copy this code and paste it into <strong>digital_bookshelf.tsx</strong>, replacing the <code>RAW_BOOKS</code> array and the <code>USE_VITSOE_SHELF</code> flag.
+            Copy this code and paste it into <strong>src/books.ts</strong>, replacing the <code>RAW_BOOKS</code> array and <code>USE_VITSOE_SHELF</code> flag.
             The app will reload with your updated selection.
           </div>
         </div>

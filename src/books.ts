@@ -27,4 +27,4 @@ export const BOOKS: Book[] = RAW_BOOKS.map(book => ({
   })(),
 }));
 
-
+export const USE_VITSOE_SHELF = true;
