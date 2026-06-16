@@ -109,36 +109,38 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
     const local = coverManifest[book.id as keyof typeof coverManifest];
     const manifestPath = local ? (local as { path: string | null; aspectRatio: number | null }).path : null;
 
-    // Collect candidate URLs
+    // Collect candidate URLs (only when no manifest — avoids unnecessary API calls)
     const candidates: { url: string }[] = [];
 
-    // OpenLibrary search by title+author
-    try {
-      let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-      const olData = await res.json();
-      const coverI = olData.docs?.[0]?.cover_i;
-      if (coverI) candidates.push({ url: `https://covers.openlibrary.org/b/id/${coverI}-L.jpg` });
-    } catch {}
+    if (!manifestPath) {
+      // OpenLibrary search by title+author
+      try {
+        let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
+        const olData = await res.json();
+        const coverI = olData.docs?.[0]?.cover_i;
+        if (coverI) candidates.push({ url: `https://covers.openlibrary.org/b/id/${coverI}-L.jpg` });
+      } catch {}
 
-    // OpenLibrary ISBN direct
-    if (book.isbn) {
-      candidates.push({ url: `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg` });
-    }
-
-    // Goodreads (via ISBN)
-    if (book.isbn) {
-      candidates.push({ url: `https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg` });
-    }
-
-    // Google Books fallback
-    try {
-      let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
-      if (res.status !== 429) {
-        const gData = await res.json();
-        const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
-        if (thumb) candidates.push({ url: thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:') });
+      // OpenLibrary ISBN direct
+      if (book.isbn) {
+        candidates.push({ url: `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg` });
       }
-    } catch {}
+
+      // Goodreads (via ISBN)
+      if (book.isbn) {
+        candidates.push({ url: `https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg` });
+      }
+
+      // Google Books fallback
+      try {
+        let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
+        if (res.status !== 429) {
+          const gData = await res.json();
+          const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+          if (thumb) candidates.push({ url: thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:') });
+        }
+      } catch {}
+    }
 
     // Try manifest path first (pre-validated at build time), then candidates with size check
     let loadedImg: HTMLImageElement | null = null;
