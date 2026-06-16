@@ -1,6 +1,6 @@
 import { RAW_BOOKS } from '../src/books';
 import { imageSizeFromFile } from 'image-size/fromFile';
-import { writeFile, mkdir, readdir, unlink } from 'fs/promises';
+import { writeFile, mkdir, readdir, unlink, rename } from 'fs/promises';
 import { readFileSync } from 'fs';
 
 const COVERS_DIR = 'public/covers';
@@ -19,6 +19,7 @@ try {
 
 const gbKey = process.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const gbUrl = (url: string) => gbKey ? `${url}&key=${gbKey}` : url;
+const MIN_COVER_HEIGHT = 300;
 
 async function download(url: string, dest: string): Promise<void> {
   const res = await fetch(url);
@@ -69,7 +70,12 @@ async function main() {
       candidates.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`);
     }
 
-    // 3. Google Books fallback
+    // 3. Goodreads (via ISBN)
+    if (book.isbn) {
+      candidates.push(`https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg`);
+    }
+
+    // 4. Google Books fallback
     try {
       const data = await fetchJson(
         gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`)
@@ -78,27 +84,45 @@ async function main() {
       if (thumb) candidates.push(thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:'));
     } catch {}
 
-    let downloaded = false;
+    let bestArea = 0;
+    let bestAspectRatio = 0;
+    let accepted = false;
     for (const cand of candidates) {
       try {
-        await download(cand, dest);
-        const dims = await imageSizeFromFile(dest);
-        if (!dims.width || !dims.height || dims.width <= 1 || dims.height <= 1) {
-          await unlink(dest).catch(() => {});
-          continue;
+        const tmp = dest + '.tmp';
+        await download(cand, tmp);
+        const dims = await imageSizeFromFile(tmp);
+
+        if (dims.height >= MIN_COVER_HEIGHT) {
+          await rename(tmp, dest);
+          manifest[book.id] = { path: `/covers/${book.id}.jpg`, aspectRatio: dims.width / dims.height };
+          found++;
+          accepted = true;
+          console.log(`  ✓ ${book.title} — ${cand.split('/').pop()} (${dims.width}x${dims.height})`);
+          break;
         }
-        manifest[book.id] = { path: `/covers/${book.id}.jpg`, aspectRatio: dims.width / dims.height };
-        found++;
-        downloaded = true;
-        console.log(`  ✓ ${book.title} — ${cand.split('/').pop()} (${dims.width}x${dims.height})`);
-        break;
+
+        const area = dims.width * dims.height;
+        if (area > bestArea) {
+          await rename(tmp, dest);
+          bestArea = area;
+          bestAspectRatio = dims.width / dims.height;
+        } else {
+          await unlink(tmp).catch(() => {});
+        }
       } catch {}
     }
 
-    if (!downloaded) {
-      console.log(`  ✗ ${book.title} — all sources failed`);
-      manifest[book.id] = { path: null, aspectRatio: null };
-      skipped++;
+    if (!accepted) {
+      if (bestArea > 0) {
+        manifest[book.id] = { path: `/covers/${book.id}.jpg`, aspectRatio: bestAspectRatio };
+        found++;
+        console.log(`  ~ ${book.title} — low-res fallback (${Math.round(Math.sqrt(bestArea))}px equiv.)`);
+      } else {
+        console.log(`  ✗ ${book.title} — all sources failed`);
+        manifest[book.id] = { path: null, aspectRatio: null };
+        skipped++;
+      }
     }
   }
 

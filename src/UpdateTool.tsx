@@ -16,8 +16,8 @@ const escSq = (s: string) => s.replace(/'/g, "\\'");
 const synopsisCache = new Map<string, string>();
 const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
-const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-if (import.meta.env.DEV && geminiKey) console.log('[UpdateTool] Gemini key loaded, prefix:', geminiKey.slice(0, 6) + '...');
+const orKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
+const OR_STORAGE_KEY = 'orModel';
 
 export default function UpdateTool({ onClose, books }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
@@ -42,6 +42,10 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [synopsisOptions, setSynopsisOptions] = useState<string[]>([]);
   const [synopsisIndex, setSynopsisIndex] = useState(0);
   const [summarizing, setSummarizing] = useState(false);
+
+  // OpenRouter model state
+  const [models, setModels] = useState<{ id: string; name: string; free: boolean }[]>([]);
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(OR_STORAGE_KEY) || '');
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -341,27 +345,33 @@ export default function UpdateTool({ onClose, books }: Props) {
   };
 
   const summarizeSynopsis = async () => {
-    if (!editSynopsis || !geminiKey) return;
+    if (!editSynopsis || !orKey || !selectedModel) return;
     setSummarizing(true);
     try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `Summarize this book synopsis in 2-3 concise sentences, keeping the key details and tone:\n\n${editSynopsis}` }] }],
-          }),
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orKey}` },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [{ role: 'user', content: `Summarize this book synopsis in 2-3 concise sentences, keeping the key details and tone:\n\n${editSynopsis}` }],
+        }),
+      });
+      if (!r.ok) {
+        showToast(`Summarize failed (${r.status}${r.status === 429 ? ' — rate limited. Try a different model or wait.' : ''})`);
+      } else {
+        const data = await r.json();
+        const text = data?.choices?.[0]?.message?.content;
+        if (text) {
+          setEditSynopsis(text);
+          setSynopsisOptions([]);
+          setSynopsisIndex(0);
+        } else {
+          showToast('Summarize returned empty response.');
         }
-      );
-      const data = await r.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        setEditSynopsis(text);
-        setSynopsisOptions([]);
-        setSynopsisIndex(0);
       }
-    } catch {}
+    } catch {
+      showToast('Summarize failed — network error.');
+    }
     setSummarizing(false);
   };
 
@@ -373,6 +383,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     setEditIsbn(isbn);
     const goodreadsId = doc.id_goodreads?.[0] || '';
     setEditGr(goodreadsId);
+    if (goodreadsId) setGrUrl(`https://www.goodreads.com/book/show/${goodreadsId}`);
 
     setEditSynopsis('Loading synopsis...');
 
@@ -449,6 +460,7 @@ export default function UpdateTool({ onClose, books }: Props) {
       if (isbns.length > 0) setEditIsbn(isbns[0]);
 
       setEditGr(grId);
+      setGrUrl(`https://www.goodreads.com/book/show/${grId}`);
 
       if (entry.excerpts?.[0]?.text) {
         setEditSynopsis(entry.excerpts[0].text);
@@ -528,6 +540,37 @@ export default function UpdateTool({ onClose, books }: Props) {
       moveBook(from, index);
     }
   };
+
+  useEffect(() => {
+    if (!orKey) { setModels([]); return; }
+    const controller = new AbortController();
+    fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal, headers: { 'Authorization': `Bearer ${orKey}` } })
+      .then(r => r.json())
+      .then(data => {
+        const list: { id: string; name: string; free: boolean }[] = (data?.data || [])
+          .filter((m: any) => m.id.endsWith(':free') || (m.pricing?.prompt === 0 && m.pricing?.completion === 0))
+          .map((m: any) => ({ id: m.id, name: m.name || m.id, free: true }))
+          .concat(
+            (data?.data || [])
+              .filter((m: any) => !m.id.endsWith(':free') && (m.pricing?.prompt !== 0 || m.pricing?.completion !== 0))
+              .map((m: any) => ({ id: m.id, name: m.name || m.id, free: false }))
+          );
+        setModels(list);
+        const saved = localStorage.getItem(OR_STORAGE_KEY);
+        if (saved && list.some(m => m.id === saved)) {
+          setSelectedModel(saved);
+        } else {
+          const firstFree = list.find(m => m.free);
+          setSelectedModel(firstFree?.id || list[0]?.id || '');
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [orKey]);
+
+  useEffect(() => {
+    if (selectedModel) localStorage.setItem(OR_STORAGE_KEY, selectedModel);
+  }, [selectedModel]);
 
   return (
     <div style={{
@@ -808,11 +851,23 @@ export default function UpdateTool({ onClose, books }: Props) {
                   {synopsisIndex + 1} / {synopsisOptions.length}
                 </div>
               )}
-              {geminiKey && editSynopsis && (
-                <button onClick={summarizeSynopsis} disabled={summarizing}
-                  style={{ ...btnStyle({ secondary: true, small: true }), marginTop: 4, width: '100%', justifyContent: 'center' }}>
-                  <Sparkles size={12} /> {summarizing ? 'Summarizing…' : 'Summarize with Gemini'}
-                </button>
+              {orKey && editSynopsis && models.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 4, width: '100%' }}>
+                  <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
+                    style={{
+                      flex: 1, fontSize: '0.7rem', padding: '2px 4px',
+                      borderRadius: 4, border: '1px solid #ccc', background: '#fff',
+                      color: '#1a1a1a',
+                    }}>
+                    {models.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}{m.free ? ' (free)' : ''}</option>
+                    ))}
+                  </select>
+                  <button onClick={summarizeSynopsis} disabled={summarizing}
+                    style={{ ...btnStyle({ secondary: true, small: true }), whiteSpace: 'nowrap' }}>
+                    <Sparkles size={12} /> {summarizing ? '…' : 'Summarize'}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -868,55 +923,73 @@ function BookCover({ book }: { book: Book }) {
     }
 
     const tryCovers = async () => {
-      let url: string | null = null;
+      const candidates: string[] = [];
 
       // Check local cover manifest first
       const local = coverManifest[book.id as keyof typeof coverManifest];
-      if (local) url = (local as { path: string | null }).path;
+      if (local) {
+        const p = (local as { path: string | null }).path;
+        if (p) candidates.push(p);
+      }
 
-      // 1. OpenLibrary search by title+author
-      if (!url) {
+      // OpenLibrary search by title+author
+      try {
+        const res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
+        const data = await res.json();
+        const coverI = data.docs?.[0]?.cover_i;
+        if (coverI) candidates.push(`https://covers.openlibrary.org/b/id/${coverI}-L.jpg`);
+      } catch {}
+
+      // OpenLibrary ISBN direct
+      if (book.isbn) {
+        candidates.push(`https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`);
+      }
+
+      // Goodreads (via ISBN)
+      if (book.isbn) {
+        candidates.push(`https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg`);
+      }
+
+      let loadedImg: HTMLImageElement | null = null;
+      let fallback: HTMLImageElement | null = null;
+
+      for (const url of candidates) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
         try {
-          const res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-          const data = await res.json();
-          const coverI = data.docs?.[0]?.cover_i;
-          if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
-        } catch {}
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = reject;
+            img.src = url;
+          });
+        } catch { continue; }
+
+        if (img.naturalHeight >= 300) {
+          loadedImg = img;
+          break;
+        }
+
+        if (!fallback) fallback = img;
       }
 
-      // 2. OpenLibrary ISBN direct (fallback)
-      if (!url && book.isbn) {
-        url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
-      }
+      if (!loadedImg && fallback) loadedImg = fallback;
 
-      if (!url) {
+      if (!loadedImg) {
         if (!cancelled) setState('error');
         return;
       }
 
-      // Validate image (reject 1x1 placeholder)
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      try {
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => (img.width > 1 ? resolve() : reject());
-          img.onerror = reject;
-          img.src = url!;
-        });
-        if (!cancelled) {
-          const c = document.createElement('canvas');
-          c.width = img.naturalWidth;
-          c.height = img.naturalHeight;
-          c.getContext('2d')!.drawImage(img, 0, 0);
-          const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
-          const objectUrl = blob ? URL.createObjectURL(blob) : url;
-          setSrc(objectUrl);
-          setState('loaded');
-          coverCache.set(book.id, objectUrl);
-          aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
-        }
-      } catch {
-        if (!cancelled) setState('error');
+      if (!cancelled) {
+        const c = document.createElement('canvas');
+        c.width = loadedImg.naturalWidth;
+        c.height = loadedImg.naturalHeight;
+        c.getContext('2d')!.drawImage(loadedImg, 0, 0);
+        const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+        const objectUrl = blob ? URL.createObjectURL(blob) : loadedImg.src;
+        setSrc(objectUrl);
+        setState('loaded');
+        coverCache.set(book.id, objectUrl);
+        aspectRatioCache.set(book.id, loadedImg.naturalWidth / loadedImg.naturalHeight);
       }
     };
 

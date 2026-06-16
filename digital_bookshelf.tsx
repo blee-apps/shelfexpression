@@ -91,70 +91,99 @@ const extractDominantColor = (url: string): Promise<string | null> => {
 
 const gbKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
+const MIN_COVER_HEIGHT = 300;
+
+const loadImage = (url: string, crossOrigin = 'anonymous'): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = crossOrigin;
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
 
 const fetchCover = async (book: Book): Promise<{ url: string | null; color: string | null }> => {
   fetchingSet.add(book.id);
   try {
-    let url: string | null = null;
-
     // Check local cover manifest first (pre-downloaded at build time)
     const local = coverManifest[book.id as keyof typeof coverManifest];
-    if (local) {
-      url = (local as { path: string | null; aspectRatio: number | null }).path;
+    const manifestPath = local ? (local as { path: string | null; aspectRatio: number | null }).path : null;
+
+    // Collect candidate URLs
+    const candidates: { url: string }[] = [];
+
+    // OpenLibrary search by title+author
+    try {
+      let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
+      const olData = await res.json();
+      const coverI = olData.docs?.[0]?.cover_i;
+      if (coverI) candidates.push({ url: `https://covers.openlibrary.org/b/id/${coverI}-L.jpg` });
+    } catch {}
+
+    // OpenLibrary ISBN direct
+    if (book.isbn) {
+      candidates.push({ url: `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg` });
     }
 
-    if (!url) {
-      // OpenLibrary first (free, no rate limit)
-      try {
-        let res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`);
-        const olData = await res.json();
-        const coverI = olData.docs?.[0]?.cover_i;
-        if (coverI) url = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
-        else if (book.isbn) url = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
-        else url = null;
-      } catch { url = null; }
+    // Goodreads (via ISBN)
+    if (book.isbn) {
+      candidates.push({ url: `https://covers.goodreads.com/bisbn/${book.isbn}-L.jpg` });
+    }
 
-      // Google Books fallback only if OpenLibrary returned nothing
-      if (!url) {
-        url = null;
-        try {
-          let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
-          if (res.status !== 429) {
-            const gData = await res.json();
-            const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
-            if (thumb) url = thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:');
-          }
-        } catch { url = null; }
+    // Google Books fallback
+    try {
+      let res = await fetch(gbUrl(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(book.title)}+inauthor:${encodeURIComponent(book.author)}`));
+      if (res.status !== 429) {
+        const gData = await res.json();
+        const thumb = gData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+        if (thumb) candidates.push({ url: thumb.replace('zoom=1', 'zoom=2').replace('http:', 'https:') });
       }
+    } catch {}
+
+    // Try manifest path first (pre-validated at build time), then candidates with size check
+    let loadedImg: HTMLImageElement | null = null;
+
+    if (manifestPath) {
+      try { loadedImg = await loadImage(manifestPath); } catch {}
     }
 
-    if (!url) {
+    if (!loadedImg) {
+      let fallback: HTMLImageElement | null = null;
+
+      for (const cand of candidates) {
+        let img: HTMLImageElement;
+        try { img = await loadImage(cand.url); } catch { continue; }
+
+        if (img.naturalHeight >= MIN_COVER_HEIGHT) {
+          loadedImg = img;
+          break;
+        }
+
+        if (!fallback) fallback = img;
+      }
+
+      if (!loadedImg && fallback) loadedImg = fallback;
+    }
+
+    if (!loadedImg) {
       fetchingSet.delete(book.id);
       colorStore.notify();
       return { url: null, color: null };
     }
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => { if (img.width > 1) resolve(); else reject(); };
-      img.onerror = reject;
-      img.src = url!;
-    });
-
-    aspectRatioCache.set(book.id, img.naturalWidth / img.naturalHeight);
+    aspectRatioCache.set(book.id, loadedImg.naturalWidth / loadedImg.naturalHeight);
 
     // Convert to an object URL so new img elements resolve from memory instantly
     const c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    c.getContext('2d')!.drawImage(img, 0, 0);
+    c.width = loadedImg.naturalWidth;
+    c.height = loadedImg.naturalHeight;
+    c.getContext('2d')!.drawImage(loadedImg, 0, 0);
     const blob = await new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
-    const objectUrl = blob ? URL.createObjectURL(blob) : url;
+    const objectUrl = blob ? URL.createObjectURL(blob) : loadedImg.src;
     coverCache.set(book.id, objectUrl);
 
     colorCache.set(book.id, getColorForString(book.title));
-    let color = await extractDominantColor(url);
+    let color = await extractDominantColor(loadedImg.src);
     if (color) {
       colorCache.set(book.id, color);
     }
