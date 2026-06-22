@@ -1,6 +1,6 @@
 # Bookshelf
 
-A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and Vite. Displays a curated reading list (up to 20 books) as a Vitsoe-style shelf grid of book covers — with an animated detail view for each book.
+A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and Vite. Displays a curated reading list (up to 24 books) as a Vitsoe-style shelf grid of book covers — with an animated detail view for each book.
 
 ## Features
 
@@ -8,7 +8,7 @@ A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and 
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
 - **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view. Swipe is throttled with distance (≥40px) and time (200–800ms) gates to prevent accidental triggers.
-- **Secret admin tool** — press `Ctrl+Shift+U` to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID and URL fields), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses via an OpenRouter model of your choice (when `VITE_OPENROUTER_API_KEY` is set — fetches available models on open, shows free models with a `(free)` tag, remembers your selection), cycling through available cover options from multiple sources with thumbnail preview and arrow buttons, uploading custom high-quality cover images directly to `public/covers/` (via a Vite dev-server endpoint, dev-only), locking covers to prevent build-time overwrite, and generating the updated `RAW_BOOKS` + `USE_VITSOE_SHELF` code. Supports file upload and drag-and-drop reordering.
+- **Secret admin tool** — press `Ctrl+Shift+U` to open an overlay for editing the book list (up-to 24 slots), searching OpenLibrary (auto-populates Goodreads ID and URL fields), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses via an OpenRouter model of your choice (when `VITE_OPENROUTER_API_KEY` is set — fetches available models on open, shows free models with a `(free)` tag, remembers your selection), cycling through available cover options from multiple sources with thumbnail preview and arrow buttons, uploading custom high-quality cover images directly to `public/covers/` (via a Vite dev-server endpoint, dev-only), locking covers to prevent build-time overwrite, and generating the updated `RAW_BOOKS` + `USE_VITSOE_SHELF` code. Supports file upload and drag-and-drop reordering.
 
 ## Shelf Design Options
 

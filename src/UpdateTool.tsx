@@ -9,7 +9,7 @@ interface Props {
   books: Book[];
 }
 
-const SLOT_COUNT = 20;
+const SLOT_COUNT = 24;
 
 const escDq = (s: string) => s.replace(/"/g, '\\"');
 const escSq = (s: string) => s.replace(/'/g, "\\'");
