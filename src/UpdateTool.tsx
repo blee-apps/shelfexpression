@@ -47,7 +47,7 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [coverLocked, setCoverLocked] = useState(false);
   const [shareMode, setShareMode] = useState(false);
   const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
-  const [shareBg, setShareBg] = useState<'light' | 'dark'>('light');
+  const [shareBg, setShareBg] = useState<'light' | 'dark' | 'vitsoe'>('light');
 
   // OpenRouter model state
   const [models, setModels] = useState<{ id: string; name: string; free: boolean }[]>([]);
@@ -241,15 +241,27 @@ export default function UpdateTool({ onClose, books }: Props) {
     const ctx = canvas.getContext('2d')!;
 
     const isLight = shareBg === 'light';
-    ctx.fillStyle = isLight ? '#FDFDFD' : '#1a1a1a';
+    const isVitsoe = shareBg === 'vitsoe';
+    ctx.fillStyle = isVitsoe ? '#F5F0EB' : isLight ? '#FDFDFD' : '#1a1a1a';
     ctx.fillRect(0, 0, W, H);
+
+    // Vitsoe wall vignette — radial gradient, top-center highlight
+    if (isVitsoe) {
+      const vignette = ctx.createRadialGradient(W / 2, 0, 0, W / 2, 0, H * 0.7);
+      vignette.addColorStop(0, 'rgba(255,255,255,0.35)');
+      vignette.addColorStop(0.7, 'rgba(255,255,255,0)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+    }
 
     // Load fonts (with timeout fallback)
     try {
       await Promise.race([
         Promise.all([
-          document.fonts.load('48px "DM Serif Text"'),
-          document.fonts.load('24px Manrope'),
+          document.fonts.load('80px "DM Serif Text"'),
+          document.fonts.load('52px "DM Serif Text"'),
+          document.fonts.load('32px Manrope'),
+          document.fonts.load('44px Manrope'),
         ]),
         new Promise(r => setTimeout(r, 2000)),
       ]);
@@ -278,15 +290,15 @@ export default function UpdateTool({ onClose, books }: Props) {
       coverImgs.push(img);
     }
 
-    const textColor = isLight ? '#1a1a1a' : '#FDFDFD';
-    const subColor = isLight ? '#666666' : '#bbbbbb';
+    const textColor = isVitsoe ? '#2a2a2a' : isLight ? '#1a1a1a' : '#FDFDFD';
+    const subColor = isVitsoe ? '#555555' : isLight ? '#666666' : '#bbbbbb';
 
     // Single book — portrait (cover on top, text stacked below)
     if (books.length === 1) {
       const book = books[0];
       const cover = coverImgs[0];
       const pad = 80;
-      const coverW = 520;
+      const coverW = 560;
       const coverRatio = cover ? cover.naturalWidth / cover.naturalHeight : 2 / 3;
       const coverH = Math.min(coverW / coverRatio, 780);
       const coverX = (W - coverW) / 2;
@@ -301,41 +313,192 @@ export default function UpdateTool({ onClose, books }: Props) {
         ctx.restore();
       }
 
-      const textMaxW = 860;
-      const textX = (W - textMaxW) / 2;
-      let textY = coverY + coverH + 70;
+      const textStartY = coverY + coverH + 50;
 
+      const textMaxW = 880;
+      const textX = (W - textMaxW) / 2;
+
+      // Scaling steps: [title size, synopsis size] — scale both down together to fit
+      const scaleSteps = [
+        { t: 80, tlh: 96, s: 44, slh: 60 },
+        { t: 64, tlh: 77, s: 36, slh: 48 },
+        { t: 52, tlh: 62, s: 30, slh: 40 },
+        { t: 44, tlh: 53, s: 24, slh: 34 },
+      ];
+
+      const availableH = H - pad - textStartY;
+      const authorH = 50;
+      const gapH = 40 + 40;
+      const synopsis = book.synopsis;
+
+      let titleFontSize = 44, titleLH = 53;
+      let synFontSize = 24, synLH = 34;
+      let finalTitleLines: string[] = [];
+      let finalSynLines: string[] = [];
+      let keepSynLines = 0;
+
+      for (const step of scaleSteps) {
+        ctx.font = `${step.t}px "DM Serif Text", serif`;
+        const tLines = wrapText(ctx, book.title, textMaxW).slice(0, 3);
+
+        ctx.font = `${step.s}px Manrope, sans-serif`;
+        const sLines = synopsis ? wrapText(ctx, synopsis, textMaxW) : [];
+
+        const contentH = tLines.length * step.tlh + gapH + authorH + sLines.length * step.slh;
+
+        titleFontSize = step.t;
+        titleLH = step.tlh;
+        synFontSize = step.s;
+        synLH = step.slh;
+        finalTitleLines = tLines;
+        finalSynLines = sLines;
+
+        if (contentH <= availableH) {
+          keepSynLines = sLines.length;
+          break;
+        }
+
+        // Last step — truncate synopsis to fit
+        if (step === scaleSteps[scaleSteps.length - 1]) {
+          const maxSyn = Math.floor((availableH - tLines.length * step.tlh - gapH - authorH) / step.slh);
+          keepSynLines = Math.max(0, maxSyn);
+        }
+      }
+
+      // Draw title (centered, wrapping supported)
+      // fillText positions from the baseline — offset so the visual top respects the gap
+      let textY = textStartY + titleFontSize * 0.85;
       ctx.fillStyle = textColor;
-      ctx.font = '48px "DM Serif Text", serif';
+      ctx.font = `${titleFontSize}px "DM Serif Text", serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(book.title, W / 2, textY);
+      for (let i = 0; i < finalTitleLines.length; i++) {
+        ctx.fillText(finalTitleLines[i], W / 2, textY);
+        if (i < finalTitleLines.length - 1) textY += titleLH;
+      }
       ctx.textAlign = 'left';
 
-      textY += 52;
-      ctx.fillStyle = subColor;
-      ctx.font = '24px Manrope, sans-serif';
-      ctx.textAlign = 'center';
+      // Draw author (centered, fixed size) — tight 30px gap from title group
       const authorLine = `${book.author}${book.year ? ' · ' + book.year : ''}`;
+      textY += titleFontSize * 0.15 + 30 + 32 * 0.85;
+      ctx.fillStyle = subColor;
+      ctx.font = '32px Manrope, sans-serif';
+      ctx.textAlign = 'center';
       ctx.fillText(authorLine, W / 2, textY);
       ctx.textAlign = 'left';
 
-      const synopsis = book.synopsis;
-      if (synopsis) {
-        textY += 48;
-        ctx.font = '22px Manrope, sans-serif';
+      // Draw synopsis (left-aligned within centered box) — wider 50px gap from author
+      if (synopsis && keepSynLines > 0) {
+        textY += 32 * 0.15 + 50 + synFontSize * 0.85;
+        ctx.font = `${synFontSize}px Manrope, sans-serif`;
         ctx.fillStyle = textColor;
-        const synLines = wrapText(ctx, synopsis, textMaxW);
-        const lineHeight = 34;
-        for (const line of synLines) {
-          if (textY > H - pad) break;
-          ctx.fillText(line, textX, textY);
-          textY += lineHeight;
+        for (let i = 0; i < keepSynLines; i++) {
+          ctx.fillText(finalSynLines[i], textX, textY);
+          textY += synLH;
         }
       }
     } else {
       // Multi-book grid: 2 cols for ≤5 books, 3 cols for 6+
-      const cols = books.length <= 5 ? 2 : 3;
+      const cols = books.length === 2 ? 1 : books.length <= 6 ? 2 : 3;
       const rows = Math.ceil(books.length / cols);
+
+      if (isVitsoe) {
+        // Vitsoe shelf layout — books bottom-aligned to shelf boards
+        const px = 80;
+        const boardH = 18, lipH = 5, bracketW = 12, bracketH = 24, uprightW = 14;
+        const bottomExtra = 40;
+
+        // Pre-scan max book height so the shelf block can be vertically centered
+        const aw = W - px * 2 + 16;
+        const colW = (aw - (cols - 1) * 24) / cols;
+        let maxBookH = 0;
+        for (const img of coverImgs) {
+          if (!img) continue;
+          const h = Math.min(colW / (img.naturalWidth / img.naturalHeight), 620);
+          if (h > maxBookH) maxBookH = h;
+        }
+        if (maxBookH === 0) maxBookH = 500;
+
+        // Constrain maxBookH so all rows fit within canvas height
+        const furniturePerRow = 36 + boardH + lipH + bracketH;
+        const maxFitH = Math.floor((H - 40 - bottomExtra) / rows) - furniturePerRow;
+        if (maxBookH > maxFitH) maxBookH = maxFitH;
+
+        const rowH = maxBookH + furniturePerRow;
+        const padY = Math.max(40, Math.floor((H - rows * rowH - bottomExtra) / 2));
+
+        // Uprights (left and right)
+        const drawUpright = (x: number) => {
+          const ug = ctx.createLinearGradient(x, 0, x + uprightW, 0);
+          ug.addColorStop(0, '#c8c8c8'); ug.addColorStop(0.35, '#e8e8e8');
+          ug.addColorStop(0.5, '#ffffff'); ug.addColorStop(0.65, '#e0e0e0');
+          ug.addColorStop(1, '#bcbcbc');
+          ctx.fillStyle = ug;
+          ctx.fillRect(x, 0, uprightW, H);
+          // Slot holes
+          ctx.fillStyle = 'rgba(0,0,0,0.13)';
+          const sx = x + (uprightW - 4) / 2;
+          for (let sy = 60; sy < H - 60; sy += 14) ctx.fillRect(sx, sy, 4, 6);
+        };
+        drawUpright(px - uprightW - 8);
+        drawUpright(W - px + 8);
+
+        for (let row = 0; row < rows; row++) {
+          const shelfTop = padY + (row + 1) * rowH - boardH;
+          const rowStartY = padY + row * rowH;
+          const bookAreaH = shelfTop - rowStartY - 36;
+
+          // Shelf board — wood gradient
+          const bg = ctx.createLinearGradient(0, shelfTop, 0, shelfTop + boardH);
+          bg.addColorStop(0, '#e8dcc8'); bg.addColorStop(0.55, '#d4c8a4'); bg.addColorStop(1, '#b8ac84');
+          ctx.fillStyle = bg;
+          ctx.fillRect(px - 8, shelfTop, W - px * 2 + 16, boardH);
+
+          // Shelf front lip
+          const lg = ctx.createLinearGradient(0, shelfTop + boardH, 0, shelfTop + boardH + lipH);
+          lg.addColorStop(0, '#b0a07c'); lg.addColorStop(1, '#9a8c68');
+          ctx.fillStyle = lg;
+          ctx.fillRect(px - 8, shelfTop + boardH, W - px * 2 + 16, lipH);
+
+          // Contact shadow above shelf
+          const sg = ctx.createLinearGradient(0, shelfTop - 14, 0, shelfTop);
+          sg.addColorStop(0, 'transparent'); sg.addColorStop(1, 'rgba(0,0,0,0.07)');
+          ctx.fillStyle = sg;
+          ctx.fillRect(px - 8, shelfTop - 14, W - px * 2 + 16, 14);
+
+          // Brackets — draw downward from shelf top (match main app behavior)
+          const bkg = ctx.createLinearGradient(px - 8 + 20, 0, px - 8 + 20 + bracketW, 0);
+          bkg.addColorStop(0, '#d0d0d0'); bkg.addColorStop(0.4, '#e8e8e8'); bkg.addColorStop(0.55, '#f0f0f0'); bkg.addColorStop(1, '#d4d4d4');
+          ctx.fillStyle = bkg;
+          ctx.fillRect(px - 8 + 20, shelfTop, bracketW, bracketH);
+          ctx.fillRect(W - px + 8 - 20 - bracketW, shelfTop, bracketW, bracketH);
+
+          // Books in this row
+          const rowBooks: number[] = [];
+          for (let i = 0; i < books.length; i++) { if (Math.floor(i / cols) === row) rowBooks.push(i); }
+          const n = rowBooks.length;
+          const aw = W - px * 2 + 16;
+          const maxBW = (aw - (cols - 1) * 24) / cols;
+          const rowW = n * maxBW + (n - 1) * 24;
+          const ox = (aw - rowW) / 2;
+
+          for (let bi = 0; bi < n; bi++) {
+            const img = coverImgs[rowBooks[bi]];
+            if (!img) continue;
+            const r = img.naturalWidth / img.naturalHeight;
+            let dw = maxBW, dh = dw / r;
+            if (dh > bookAreaH) { dh = bookAreaH; dw = dh * r; }
+            if (dw > maxBW) { dw = maxBW; dh = dw / r; }
+            const bx = px - 8 + ox + bi * (maxBW + 24);
+            const by = shelfTop - dh;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.18)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 4;
+            ctx.drawImage(img, bx + (maxBW - dw) / 2, by, dw, dh);
+            ctx.restore();
+          }
+        }
+      } else {
       const pad = 60;
       const gap = 24;
       const gridW = W - pad * 2;
@@ -373,6 +536,7 @@ export default function UpdateTool({ onClose, books }: Props) {
           ctx.drawImage(img, dx, dy, drawW, drawH);
           ctx.restore();
         }
+      }
       }
     }
 
@@ -891,6 +1055,11 @@ export default function UpdateTool({ onClose, books }: Props) {
               background: shareBg === 'dark' ? '#1a1a1a' : undefined,
               color: shareBg === 'dark' ? '#fff' : undefined,
             }}>Dark</button>
+            <button onClick={() => setShareBg('vitsoe')} style={{
+              ...btnStyle({ secondary: true, small: true }),
+              background: shareBg === 'vitsoe' ? '#1a1a1a' : undefined,
+              color: shareBg === 'vitsoe' ? '#fff' : undefined,
+            }}>Vitsoe</button>
           </div>
           <div style={{ width: 1, height: 20, background: '#ddd' }} />
           <button onClick={() => {
