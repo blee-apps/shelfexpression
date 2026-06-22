@@ -512,6 +512,7 @@ export default function App() {
   const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const bookElRef = useRef<HTMLDivElement | null>(null);
   const navTargetRef = useRef<Book | null>(null);
+  const titleTapRef = useRef({ count: 0, timer: null as ReturnType<typeof setTimeout> | null });
   const navExitYRef = useRef(0);
   const navExitRectRef = useRef<DOMRect | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -1048,7 +1049,16 @@ export default function App() {
         ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 translate-y-12 scale-95 pointer-events-none' : 'opacity-100 translate-y-0 scale-100'}`}
       >
         <div className="mb-6 md:mb-6">
-          <h1 className="text-4xl md:text-5xl font-serif text-gray-900 mb-4">Bookshelf</h1>
+          <h1 className="text-4xl md:text-5xl font-serif text-gray-900 mb-4 select-none"
+            onClick={() => {
+              const t = titleTapRef.current;
+              t.count++;
+              if (t.timer) clearTimeout(t.timer);
+              if (t.count >= 5) { t.count = 0; setShowAdmin(v => !v); }
+              else t.timer = setTimeout(() => { t.count = 0; }, 2000);
+            }}>
+            Bookshelf
+          </h1>
           <p className="text-lg text-gray-600">{BOOKS.length} of the best books I&rsquo;ve read recently.</p>
         </div>
 
