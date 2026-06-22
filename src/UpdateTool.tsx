@@ -289,6 +289,7 @@ export default function UpdateTool({ onClose, books }: Props) {
       };
       return next;
     });
+    coverCache.delete(String(editingIndex + 1));
     showToast(`Saved slot #${editingIndex + 1}.`);
   };
 
@@ -1161,7 +1162,7 @@ function BookCover({ book }: { book: Book }) {
 
     tryCovers();
     return () => { cancelled = true; };
-  }, [book.id, book.title, book.author, book.isbn]);
+  }, [book.id, book.title, book.author, book.isbn, book.coverUrl]);
 
   return (
     <>
