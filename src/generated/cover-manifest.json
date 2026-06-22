@@ -13,19 +13,19 @@
   },
   "128533513": {
     "path": "/covers/128533513.jpg",
-    "aspectRatio": 0.714
+    "aspectRatio": 0.6309090909090909
   },
   "177148776": {
     "path": "/covers/177148776.jpg",
-    "aspectRatio": 0.616
+    "aspectRatio": 0.6475
   },
   "203200544": {
     "path": "/covers/203200544.jpg",
-    "aspectRatio": 0.6525
+    "aspectRatio": 0.6766666666666666
   },
   "1250893682": {
     "path": "/covers/1250893682.jpg",
-    "aspectRatio": 0.7672634271099744
+    "aspectRatio": 0.6622516556291391
   },
   "1555978401": {
     "path": "/covers/1555978401.jpg",
@@ -37,15 +37,15 @@
   },
   "0812550706": {
     "path": "/covers/0812550706.jpg",
-    "aspectRatio": 0.618
+    "aspectRatio": 0.6625
+  },
+  "0307946892": {
+    "path": "/covers/0307946892.jpg",
+    "aspectRatio": 0.6484210526315789
   },
   "0374139946": {
     "path": "/covers/0374139946.jpg",
     "aspectRatio": 0.654
-  },
-  "0307946892": {
-    "path": "/covers/0307946892.jpg",
-    "aspectRatio": 0.624
   },
   "0812976711": {
     "path": "/covers/0812976711.jpg",
@@ -53,6 +53,6 @@
   },
   "0995624233": {
     "path": "/covers/0995624233.jpg",
-    "aspectRatio": 0.6
+    "aspectRatio": 0.666
   }
 }

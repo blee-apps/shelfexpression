@@ -45,6 +45,9 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [coverOptions, setCoverOptions] = useState<{ url: string; label: string }[]>([]);
   const [coverIndex, setCoverIndex] = useState(0);
   const [coverLocked, setCoverLocked] = useState(false);
+  const [shareMode, setShareMode] = useState(false);
+  const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
+  const [shareBg, setShareBg] = useState<'light' | 'dark'>('light');
 
   // OpenRouter model state
   const [models, setModels] = useState<{ id: string; name: string; free: boolean }[]>([]);
@@ -197,6 +200,212 @@ export default function UpdateTool({ onClose, books }: Props) {
       return next;
     });
     showToast(`Moved book #${from + 1} to #${to + 1}.`);
+  };
+
+  // --- SHARE IMAGE RENDERER ---
+  const loadImg = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+
+  const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth) {
+        if (line) lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+
+  const renderShareImage = async (): Promise<Blob | null> => {
+    const indices = [...selectedForShare].sort((a, b) => a - b);
+    const books = indices.map(i => slots[i]).filter((b): b is Book => b !== null);
+    if (books.length === 0) return null;
+
+    const W = 1080, H = 1920;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+
+    const isLight = shareBg === 'light';
+    ctx.fillStyle = isLight ? '#FDFDFD' : '#1a1a1a';
+    ctx.fillRect(0, 0, W, H);
+
+    // Load fonts (with timeout fallback)
+    try {
+      await Promise.race([
+        Promise.all([
+          document.fonts.load('48px "DM Serif Text"'),
+          document.fonts.load('24px Manrope'),
+        ]),
+        new Promise(r => setTimeout(r, 2000)),
+      ]);
+    } catch {}
+
+    // Load cover images
+    const coverImgs: (HTMLImageElement | null)[] = [];
+    for (const book of books) {
+      let img: HTMLImageElement | null = null;
+      const cached = coverCache.get(book.id);
+      if (cached) {
+        try { img = await loadImg(cached); } catch {}
+      }
+      if (!img && book.coverUrl) {
+        try { img = await loadImg(book.coverUrl); } catch {}
+      }
+      if (!img) {
+        const m = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest];
+        if (m) {
+          const p = (m as { path: string | null }).path;
+          if (p) {
+            try { img = await loadImg(p); } catch {}
+          }
+        }
+      }
+      coverImgs.push(img);
+    }
+
+    const textColor = isLight ? '#1a1a1a' : '#FDFDFD';
+    const subColor = isLight ? '#666666' : '#bbbbbb';
+
+    // Single book — portrait (cover on top, text stacked below)
+    if (books.length === 1) {
+      const book = books[0];
+      const cover = coverImgs[0];
+      const pad = 80;
+      const coverW = 520;
+      const coverRatio = cover ? cover.naturalWidth / cover.naturalHeight : 2 / 3;
+      const coverH = Math.min(coverW / coverRatio, 780);
+      const coverX = (W - coverW) / 2;
+      const coverY = 120;
+
+      if (cover) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.15)';
+        ctx.shadowBlur = 24;
+        ctx.shadowOffsetY = 6;
+        ctx.drawImage(cover, coverX, coverY, coverW, coverH);
+        ctx.restore();
+      }
+
+      const textMaxW = 860;
+      const textX = (W - textMaxW) / 2;
+      let textY = coverY + coverH + 70;
+
+      ctx.fillStyle = textColor;
+      ctx.font = '48px "DM Serif Text", serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(book.title, W / 2, textY);
+      ctx.textAlign = 'left';
+
+      textY += 52;
+      ctx.fillStyle = subColor;
+      ctx.font = '24px Manrope, sans-serif';
+      ctx.textAlign = 'center';
+      const authorLine = `${book.author}${book.year ? ' · ' + book.year : ''}`;
+      ctx.fillText(authorLine, W / 2, textY);
+      ctx.textAlign = 'left';
+
+      const synopsis = book.synopsis;
+      if (synopsis) {
+        textY += 48;
+        ctx.font = '22px Manrope, sans-serif';
+        ctx.fillStyle = textColor;
+        const synLines = wrapText(ctx, synopsis, textMaxW);
+        const lineHeight = 34;
+        for (const line of synLines) {
+          if (textY > H - pad) break;
+          ctx.fillText(line, textX, textY);
+          textY += lineHeight;
+        }
+      }
+    } else {
+      // Multi-book grid: 2 cols for ≤5 books, 3 cols for 6+
+      const cols = books.length <= 5 ? 2 : 3;
+      const rows = Math.ceil(books.length / cols);
+      const pad = 60;
+      const gap = 24;
+      const gridW = W - pad * 2;
+      const gridH = H - pad * 2;
+      const cellW = (gridW - gap * (cols - 1)) / cols;
+      const cellH = (gridH - gap * (rows - 1)) / rows;
+
+      for (let i = 0; i < books.length; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const img = coverImgs[i];
+
+        // Center partial last row
+        const cellsInThisRow = (row < rows - 1) ? cols : books.length - (rows - 1) * cols;
+        const rowOffset = (cols - cellsInThisRow) * (cellW + gap) / 2;
+
+        const cx = pad + rowOffset + col * (cellW + gap);
+        const cy = pad + row * (cellH + gap);
+
+        if (img) {
+          const imgRatio = img.naturalWidth / img.naturalHeight;
+          let drawW = cellW;
+          let drawH = drawW / imgRatio;
+          if (drawH > cellH) {
+            drawH = cellH;
+            drawW = drawH * imgRatio;
+          }
+          const dx = cx + (cellW - drawW) / 2;
+          const dy = cy + (cellH - drawH) / 2;
+
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.15)';
+          ctx.shadowBlur = 24;
+          ctx.shadowOffsetY = 6;
+          ctx.drawImage(img, dx, dy, drawW, drawH);
+          ctx.restore();
+        }
+      }
+    }
+
+    return new Promise(resolve => {
+      canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92);
+    });
+  };
+
+  const generateShareJpg = async () => {
+    if (selectedForShare.size === 0) return;
+    try {
+      const blob = await renderShareImage();
+      if (!blob) { showToast('Failed to generate image.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'bookshelf.jpg';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Saved (${selectedForShare.size} ${selectedForShare.size === 1 ? 'book' : 'books'}).`);
+    } catch (err: any) {
+      showToast('Error generating image: ' + err.message);
+    }
+  };
+
+  const toggleShareSelection = (i: number) => {
+    setSelectedForShare(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) { next.delete(i); }
+      else if (next.size >= 12) { return prev; }
+      else { next.add(i); }
+      return next;
+    });
   };
 
   const populateCoverOptions = async (book: { title?: string; author?: string; isbn?: string } | null, extraCoverId?: number) => {
@@ -655,9 +864,46 @@ export default function UpdateTool({ onClose, books }: Props) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={reloadFromApp} style={btnStyle({ secondary: true, small: true })}>Reload from App</button>
+          <button onClick={() => { setShareMode(v => !v); setSelectedForShare(new Set()); }} style={btnStyle({ secondary: true, small: true })}>
+            {shareMode ? 'Exit Share' : 'Share'}
+          </button>
           <button onClick={onClose} style={btnStyle({ small: true })}><X size={14} /></button>
         </div>
       </div>
+
+      {shareMode && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 20px', borderBottom: '1px solid #eee', flexShrink: 0,
+          background: '#fafafa',
+        }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1a1a1a' }}>
+            {selectedForShare.size} selected
+          </span>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <button onClick={() => setShareBg('light')} style={{
+              ...btnStyle({ secondary: true, small: true }),
+              background: shareBg === 'light' ? '#1a1a1a' : undefined,
+              color: shareBg === 'light' ? '#fff' : undefined,
+            }}>Light</button>
+            <button onClick={() => setShareBg('dark')} style={{
+              ...btnStyle({ secondary: true, small: true }),
+              background: shareBg === 'dark' ? '#1a1a1a' : undefined,
+              color: shareBg === 'dark' ? '#fff' : undefined,
+            }}>Dark</button>
+          </div>
+          <div style={{ width: 1, height: 20, background: '#ddd' }} />
+          <button onClick={() => {
+            setSelectedForShare(new Set(slots.map((_, i) => slots[i] ? i : -1).filter(i => i >= 0).slice(0, 12)));
+          }} style={btnStyle({ secondary: true, small: true })}>Select All</button>
+          <button onClick={() => setSelectedForShare(new Set())} style={btnStyle({ secondary: true, small: true })}>Deselect All</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={generateShareJpg} disabled={selectedForShare.size === 0}
+            style={btnStyle({ small: true })}>
+            Generate JPG ({selectedForShare.size})
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {/* LOAD SECTION */}
@@ -713,7 +959,7 @@ export default function UpdateTool({ onClose, books }: Props) {
           {slots.map((book, i) => (
             <div key={i}
               className="admin-slot"
-              draggable={!!book}
+              draggable={!!book && !shareMode}
               onDragStart={book ? handleDragStart(i) : undefined}
               onDragEnd={book ? handleDragEnd : undefined}
               onDragOver={handleDragOver}
@@ -722,10 +968,10 @@ export default function UpdateTool({ onClose, books }: Props) {
               onDrop={handleDrop(i)}
               style={{
                 background: book ? '#fff' : '#fafafa',
-                border: book ? '1px solid #eee' : '1px dashed #ddd',
+                border: selectedForShare.has(i) ? '2px solid #1a1a1a' : book ? '1px solid #eee' : '1px dashed #ddd',
                 borderRadius: 8, padding: 10, position: 'relative',
                 display: 'flex', flexDirection: 'column', gap: 5,
-                cursor: book ? 'grab' : 'pointer',
+                cursor: book ? (shareMode ? 'pointer' : 'grab') : 'pointer',
                 minHeight: book ? 'auto' : 130,
                 alignItems: book ? 'stretch' : 'center',
                 justifyContent: book ? undefined : 'center',
@@ -733,13 +979,24 @@ export default function UpdateTool({ onClose, books }: Props) {
                 fontSize: book ? undefined : '0.85rem',
                 transition: 'box-shadow 0.15s',
               }}
-              onClick={() => { if (!book) openEdit(i); }}
+              onClick={() => {
+                if (shareMode && book) { toggleShareSelection(i); return; }
+                if (!book) openEdit(i);
+              }}
             >
               {book ? (
                 <>
-                  <div style={{ position: 'absolute', top: 5, left: 7, fontSize: '0.6rem', fontWeight: 600, color: '#bbb', background: '#f5f5f5', padding: '1px 5px', borderRadius: 3 }}>
-                    <GripVertical size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />#{i + 1}
-                  </div>
+                  {shareMode ? (
+                    <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
+                      <input type="checkbox" checked={selectedForShare.has(i)}
+                        onChange={() => toggleShareSelection(i)}
+                        style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#1a1a1a' }} />
+                    </div>
+                  ) : (
+                    <div style={{ position: 'absolute', top: 5, left: 7, fontSize: '0.6rem', fontWeight: 600, color: '#bbb', background: '#f5f5f5', padding: '1px 5px', borderRadius: 3 }}>
+                      <GripVertical size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />#{i + 1}
+                    </div>
+                  )}
                   <div style={{
                     width: '100%', aspectRatio: aspectRatioCache.get(book.id) || 2/3, background: '#f0f0f0', borderRadius: 4,
                     overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -751,13 +1008,15 @@ export default function UpdateTool({ onClose, books }: Props) {
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#888' }}>{book.author}</div>
                   <div style={{ fontSize: '0.68rem', color: '#aaa' }}>{book.year || ''}</div>
-                  <div style={{ display: 'flex', gap: 5, marginTop: 'auto', paddingTop: 4 }}>
-                    <button onClick={(e) => { e.stopPropagation(); openEdit(i); }} style={btnStyle({ secondary: true, small: true })}>Edit</button>
-                    <button onClick={(e) => { e.stopPropagation(); removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
-                    {i > 0 && (
-                      <button onClick={(e) => { e.stopPropagation(); moveBook(i, 0); }} style={btnStyle({ secondary: true, small: true })} title="Move to top">↑</button>
-                    )}
-                  </div>
+                  {!shareMode && (
+                    <div style={{ display: 'flex', gap: 5, marginTop: 'auto', paddingTop: 4 }}>
+                      <button onClick={(e) => { e.stopPropagation(); openEdit(i); }} style={btnStyle({ secondary: true, small: true })}>Edit</button>
+                      <button onClick={(e) => { e.stopPropagation(); removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
+                      {i > 0 && (
+                        <button onClick={(e) => { e.stopPropagation(); moveBook(i, 0); }} style={btnStyle({ secondary: true, small: true })} title="Move to top">↑</button>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <span onClick={() => openEdit(i)} style={{ cursor: 'pointer' }}>+ Empty slot #{i + 1}</span>
