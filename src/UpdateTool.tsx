@@ -306,14 +306,14 @@ export default function UpdateTool({ onClose, books }: Props) {
 
       if (cover) {
         ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.15)';
-        ctx.shadowBlur = 24;
-        ctx.shadowOffsetY = 6;
+        ctx.shadowColor = 'rgba(0,0,0,0.30)';
+        ctx.shadowBlur = 40;
+        ctx.shadowOffsetY = 16;
         ctx.drawImage(cover, coverX, coverY, coverW, coverH);
         ctx.restore();
       }
 
-      const textStartY = coverY + coverH + 50;
+      const textStartY = coverY + coverH + 80;
 
       const textMaxW = 880;
       const textX = (W - textMaxW) / 2;
@@ -328,7 +328,7 @@ export default function UpdateTool({ onClose, books }: Props) {
 
       const availableH = H - pad - textStartY;
       const authorH = 50;
-      const gapH = 40 + 40;
+      const gapH = 22 + 65 + 5 + 65;
       const synopsis = book.synopsis;
 
       let titleFontSize = 44, titleLH = 53;
@@ -365,30 +365,35 @@ export default function UpdateTool({ onClose, books }: Props) {
         }
       }
 
-      // Draw title (centered, wrapping supported)
-      // fillText positions from the baseline — offset so the visual top respects the gap
+      // Draw title — left-aligned, with drop shadow on light/vitsoe themes
       let textY = textStartY + titleFontSize * 0.85;
       ctx.fillStyle = textColor;
       ctx.font = `${titleFontSize}px "DM Serif Text", serif`;
-      ctx.textAlign = 'center';
+      if (shareBg !== 'dark') {
+        ctx.shadowColor = 'rgba(0,0,0,0.06)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1;
+      }
       for (let i = 0; i < finalTitleLines.length; i++) {
-        ctx.fillText(finalTitleLines[i], W / 2, textY);
+        ctx.fillText(finalTitleLines[i], textX, textY);
         if (i < finalTitleLines.length - 1) textY += titleLH;
       }
-      ctx.textAlign = 'left';
+      ctx.shadowColor = 'transparent';
 
-      // Draw author (centered, fixed size) — tight 30px gap from title group
-      const authorLine = `${book.author}${book.year ? ' · ' + book.year : ''}`;
-      textY += titleFontSize * 0.15 + 30 + 32 * 0.85;
+      // Draw author — uppercased, left-aligned, proportional to detail view spacing
+      textY += titleFontSize * 0.15 + 22 + 32 * 0.85;
       ctx.fillStyle = subColor;
       ctx.font = '32px Manrope, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(authorLine, W / 2, textY);
-      ctx.textAlign = 'left';
+      const authorLine = `${book.author.toUpperCase()}${book.year ? '  \u2022  ' + book.year : ''}`;
+      ctx.fillText(authorLine, textX, textY);
 
-      // Draw synopsis (left-aligned within centered box) — wider 50px gap from author
+      // Separator line — proportional to detail view (w-8 h-[2px] → 86×5 at canvas scale)
       if (synopsis && keepSynLines > 0) {
-        textY += 32 * 0.15 + 50 + synFontSize * 0.85;
+        textY += 32 * 0.15 + 65;
+        ctx.fillStyle = textColor;
+        ctx.fillRect(textX, textY, 86, 5);
+
+        textY += 5 + 65 + synFontSize * 0.85;
         ctx.font = `${synFontSize}px Manrope, sans-serif`;
         ctx.fillStyle = textColor;
         for (let i = 0; i < keepSynLines; i++) {
