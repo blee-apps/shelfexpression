@@ -1068,9 +1068,12 @@ export default function UpdateTool({ onClose, books }: Props) {
           </div>
           <div style={{ width: 1, height: 20, background: '#ddd' }} />
           <button onClick={() => {
-            setSelectedForShare(new Set(slots.map((_, i) => slots[i] ? i : -1).filter(i => i >= 0).slice(0, 12)));
-          }} style={btnStyle({ secondary: true, small: true })}>Select All</button>
-          <button onClick={() => setSelectedForShare(new Set())} style={btnStyle({ secondary: true, small: true })}>Deselect All</button>
+            const allSelected = slots.every((s, i) => !s || selectedForShare.has(i));
+            if (allSelected) setSelectedForShare(new Set());
+            else setSelectedForShare(new Set(slots.map((_, i) => slots[i] ? i : -1).filter(i => i >= 0).slice(0, 12)));
+          }} style={btnStyle({ secondary: true, small: true })}>
+            {slots.every((s, i) => !s || selectedForShare.has(i)) ? 'Deselect All' : 'Select All'}
+          </button>
           <div style={{ flex: 1 }} />
           <button onClick={generateShareJpg} disabled={selectedForShare.size === 0}
             style={btnStyle({ small: true })}>
@@ -1127,7 +1130,7 @@ export default function UpdateTool({ onClose, books }: Props) {
 
         {/* GRID */}
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
           gap: 10, marginBottom: 20,
         }}>
           {slots.map((book, i) => (
