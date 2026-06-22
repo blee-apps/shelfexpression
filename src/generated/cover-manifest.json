@@ -1,50 +1,58 @@
 {
-  "1": {
-    "path": "/covers/1.jpg",
-    "aspectRatio": 0.616
+  "75302296": {
+    "path": "/covers/75302296.jpg",
+    "aspectRatio": 0.662
   },
-  "2": {
-    "path": "/covers/2.jpg",
-    "aspectRatio": 0.678
-  },
-  "3": {
-    "path": "/covers/3.jpg",
-    "aspectRatio": 0.618
-  },
-  "4": {
-    "path": "/covers/4.jpg",
+  "123136728": {
+    "path": "/covers/123136728.jpg",
     "aspectRatio": 0.64
   },
-  "5": {
-    "path": "/covers/5.jpg",
-    "aspectRatio": 0.6525
+  "123163147": {
+    "path": "/covers/123163147.jpg",
+    "aspectRatio": 0.662
   },
-  "6": {
-    "path": "/covers/6.jpg",
-    "aspectRatio": 0.654
-  },
-  "7": {
-    "path": "/covers/7.jpg",
-    "aspectRatio": 0.624
-  },
-  "8": {
-    "path": "/covers/8.jpg",
-    "aspectRatio": 0.704
-  },
-  "9": {
-    "path": "/covers/9.jpg",
+  "128533513": {
+    "path": "/covers/128533513.jpg",
     "aspectRatio": 0.714
   },
-  "10": {
-    "path": "/covers/10.jpg",
+  "177148776": {
+    "path": "/covers/177148776.jpg",
+    "aspectRatio": 0.616
+  },
+  "203200544": {
+    "path": "/covers/203200544.jpg",
+    "aspectRatio": 0.6525
+  },
+  "1250893682": {
+    "path": "/covers/1250893682.jpg",
+    "aspectRatio": 0.7672634271099744
+  },
+  "1555978401": {
+    "path": "/covers/1555978401.jpg",
+    "aspectRatio": 0.678
+  },
+  "9781101972083": {
+    "path": "/covers/9781101972083.jpg",
+    "aspectRatio": 0.676
+  },
+  "0812550706": {
+    "path": "/covers/0812550706.jpg",
+    "aspectRatio": 0.618
+  },
+  "0374139946": {
+    "path": "/covers/0374139946.jpg",
+    "aspectRatio": 0.654
+  },
+  "0307946892": {
+    "path": "/covers/0307946892.jpg",
+    "aspectRatio": 0.624
+  },
+  "0812976711": {
+    "path": "/covers/0812976711.jpg",
+    "aspectRatio": 0.704
+  },
+  "0995624233": {
+    "path": "/covers/0995624233.jpg",
     "aspectRatio": 0.6
-  },
-  "11": {
-    "path": "/covers/11.jpg",
-    "aspectRatio": 0.662
-  },
-  "12": {
-    "path": "/covers/12.jpg",
-    "aspectRatio": 0.662
   }
 }

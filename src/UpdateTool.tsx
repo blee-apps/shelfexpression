@@ -44,6 +44,7 @@ export default function UpdateTool({ onClose, books }: Props) {
   const [summarizing, setSummarizing] = useState(false);
   const [coverOptions, setCoverOptions] = useState<{ url: string; label: string }[]>([]);
   const [coverIndex, setCoverIndex] = useState(0);
+  const [coverLocked, setCoverLocked] = useState(false);
 
   // OpenRouter model state
   const [models, setModels] = useState<{ id: string; name: string; free: boolean }[]>([]);
@@ -124,6 +125,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         gr: getStr('gr'),
         mult: 1.0,
         coverUrl: getStr('coverUrl') || undefined,
+        coverLocked: /coverLocked:\s*true/.test(entry) || undefined,
       };
     });
   };
@@ -261,6 +263,7 @@ export default function UpdateTool({ onClose, books }: Props) {
     setSearchResults([]);
     setGrUrl('');
     setGrLookupStatus('');
+    setCoverLocked(book?.coverLocked || false);
     populateCoverOptions(book);
   };
 
@@ -282,6 +285,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         gr: editGr.trim(),
         mult: 1.0,
         coverUrl: coverOptions[coverIndex]?.url || '',
+        coverLocked: coverLocked || undefined,
       };
       return next;
     });
@@ -540,13 +544,12 @@ export default function UpdateTool({ onClose, books }: Props) {
       return;
     }
     const lines = filled.map((book, i) => {
-      const base = `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}'`;
-      if (book.coverUrl) {
-        return base + `, coverUrl: '${escSq(book.coverUrl)}' }`;
-      }
-      return base + ' }';
+      let entry = `  { id: '${i + 1}', isbn: '${escSq(book.isbn || '')}', title: "${escDq(book.title || '')}", author: '${escSq(book.author || '')}', year: ${book.year || 0}, synopsis: "${escDq(book.synopsis || '')}", gr: '${escSq(book.gr || '')}'`;
+      if (book.coverUrl) entry += `, coverUrl: '${escSq(book.coverUrl)}'`;
+      if (book.coverLocked) entry += ', coverLocked: true';
+      return entry + ' }';
     });
-    const code = 'const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];\n\nexport const USE_VITSOE_SHELF = ' + useVitsoeShelf + ';';
+    const code = 'export const RAW_BOOKS = [\n' + lines.join(',\n') + ',\n];\n\nexport const USE_VITSOE_SHELF = ' + useVitsoeShelf + ';';
     setGeneratedCode(code);
     showToast(`Code generated (${filled.length} books).`);
   };
@@ -920,6 +923,46 @@ export default function UpdateTool({ onClose, books }: Props) {
                 <div style={{ fontSize: '0.75rem', color: '#aaa', padding: '8px 0' }}>No cover options loaded. Search and select a book to populate cover options.</div>
               )}
 
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                {import.meta.env.DEV && (
+                  <>
+                    <input
+                      type="file" accept="image/*"
+                      id="cover-file-input" style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const isbn = editIsbn.trim() || String(editingIndex + 1);
+                        try {
+                          const res = await fetch(`/api/upload-cover?key=${encodeURIComponent(isbn)}`, {
+                            method: 'POST',
+                            body: file,
+                          });
+                          if (!res.ok) throw new Error(await res.text());
+                          const safeKey = isbn.replace(/[^a-zA-Z0-9_-]/g, '');
+                          setCoverOptions([{ url: `/covers/${safeKey}.jpg`, label: 'Custom (uploaded)' }]);
+                          setCoverIndex(0);
+                          setCoverLocked(true);
+                          showToast('Cover uploaded. Rebuild will preserve this file.');
+                        } catch (err: any) {
+                          showToast(`Upload failed: ${err.message}`);
+                        }
+                        (e.target as HTMLInputElement).value = '';
+                      }}
+                    />
+                    <button onClick={() => document.getElementById('cover-file-input')?.click()}
+                      style={{ ...btnStyle({ secondary: true, small: true }), fontSize: '0.7rem' }}>
+                      <Upload size={12} /> Choose custom cover…
+                    </button>
+                  </>
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={coverLocked} onChange={e => setCoverLocked(e.target.checked)}
+                    style={{ cursor: 'pointer' }} />
+                  Lock cover
+                </label>
+              </div>
+
               <label style={labelStyle}>Synopsis</label>
               <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
                 {synopsisOptions.length > 1 && (
@@ -1049,7 +1092,7 @@ function BookCover({ book }: { book: Book }) {
       const candidates: string[] = [];
 
       // Check local cover manifest first
-      const local = coverManifest[book.id as keyof typeof coverManifest];
+      const local = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest];
       if (local) {
         const p = (local as { path: string | null }).path;
         if (p) candidates.push(p);

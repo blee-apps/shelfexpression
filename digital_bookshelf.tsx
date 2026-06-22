@@ -106,7 +106,7 @@ const fetchCover = async (book: Book): Promise<{ url: string | null; color: stri
   fetchingSet.add(book.id);
   try {
     // Check local cover manifest first (pre-downloaded at build time)
-    const local = coverManifest[book.id as keyof typeof coverManifest];
+    const local = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest];
     const manifestPath = local ? (local as { path: string | null; aspectRatio: number | null }).path : null;
 
     // If a coverUrl override is set, try it first
@@ -291,7 +291,7 @@ const useBookAspectRatio = (book: Book) => {
   useSyncExternalStore(colorStore.subscribe, colorStore.getSnapshot);
   const cached = aspectRatioCache.get(book.id);
   if (cached) return cached;
-  const local = coverManifest[book.id as keyof typeof coverManifest];
+  const local = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest];
   if (local) return (local as { aspectRatio: number | null }).aspectRatio || 2/3;
   return 2/3;
 };

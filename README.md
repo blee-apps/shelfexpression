@@ -8,7 +8,7 @@ A responsive book cover gallery built with React, TypeScript, Tailwind CSS, and 
 - **Dominant color extraction** — samples cover art pixels to derive a fallback background color. Skips near-white, near-black, and desaturated pixels; prefers saturated hues.
 - **Animated detail view** — click a cover to animate it to the center of the screen with a smooth scale transition. Metadata panel slides in alongside with synopsis, author, year, and a Goodreads link.
 - **Mobile responsive** — touch gestures (swipe left/right to navigate books, swipe down to close) on the detail view. Swipe is throttled with distance (≥40px) and time (200–800ms) gates to prevent accidental triggers.
-- **Secret admin tool** — press `Ctrl+Shift+U` to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses via an OpenRouter model of your choice (when `VITE_OPENROUTER_API_KEY` is set — fetches available models on open, shows free models with a `(free)` tag, remembers your selection), and generating the updated `RAW_BOOKS` + `USE_VITSOE_SHELF` code. Supports file upload and drag-and-drop reordering.
+- **Secret admin tool** — press `Ctrl+Shift+U` to open an overlay for editing the book list (up-to 20 slots), searching OpenLibrary (auto-populates Goodreads ID and URL fields), pasting Goodreads URLs for metadata, collecting synopses from multiple sources (OpenLibrary Work, OpenLibrary Books API, OpenLibrary Editions, and Google Books as a last-resort fallback), cycling through synopsis options with arrow buttons, condensing long synopses via an OpenRouter model of your choice (when `VITE_OPENROUTER_API_KEY` is set — fetches available models on open, shows free models with a `(free)` tag, remembers your selection), cycling through available cover options from multiple sources with thumbnail preview and arrow buttons, uploading custom high-quality cover images directly to `public/covers/` (via a Vite dev-server endpoint, dev-only), locking covers to prevent build-time overwrite, and generating the updated `RAW_BOOKS` + `USE_VITSOE_SHELF` code. Supports file upload and drag-and-drop reordering.
 
 ## Shelf Design Options
 
@@ -35,14 +35,16 @@ const RAW_BOOKS = [
 | Field | Description |
 |-------|-------------|
 | `id` | Unique identifier (string). Must match the 1-based index in practice. |
-| `isbn` | ISBN for cover art lookups. |
+| `isbn` | ISBN for cover art lookups and stable manifest key. |
 | `title` | Book title. |
 | `author` | Author name. |
 | `year` | Publication year. |
 | `synopsis` | Short description shown in the detail panel. |
 | `gr` | Goodreads book ID (used for the "View on Goodreads" link). |
+| `coverUrl` | *(Optional)* Explicit cover URL. When set, the runtime uses this directly instead of running the auto-detection chain (OpenLibrary → Goodreads → Google Books). Set via the cover selector or custom upload in the admin tool. |
+| `coverLocked` | *(Optional)* Boolean. When `true`, the build-time download script skips this book and preserves the existing file in `public/covers/`, only re-measuring its dimensions. Set automatically when uploading a custom cover via the admin tool. |
 
-**Tip:** Use the admin tool (`Ctrl+Shift+U`) to edit books, search OpenLibrary, and generate the `RAW_BOOKS` code automatically.
+**Tip:** Use the admin tool (`Ctrl+Shift+U`) to edit books, search OpenLibrary, cycle through cover candidates, upload custom covers, and generate the `RAW_BOOKS` code automatically.
 
 ### 2. Customize styling
 
@@ -77,7 +79,7 @@ npm install
 npm run build    # prebuild step downloads covers, then outputs to dist/
 ```
 
-The `prebuild` script (`npm run download-covers`) fetches cover images from OpenLibrary (with Google Books fallback) and saves them to `public/covers/`, then generates `src/generated/cover-manifest.json`. At runtime the app serves covers from the same origin — zero API calls, no CORS issues, and the site works offline.
+The `prebuild` script (`npm run download-covers`) fetches cover images from OpenLibrary (with Goodreads and Google Books fallback) and saves them to `public/covers/`, then generates `src/generated/cover-manifest.json`. At runtime the app serves covers from the same origin — zero API calls, no CORS issues, and the site works offline. Books with `coverLocked: true` are skipped, preserving any manually-placed custom cover images.
 
 Run `npm run download-covers` manually to refresh covers without a full build.
 
@@ -108,7 +110,8 @@ UpdateTool.html         — Standalone reference for the admin tool (not used at
 - **Google Books as last resort** — OpenLibrary search (unthrottled) is tried first for both covers and synopses. Google Books is only queried when OpenLibrary returns nothing, avoiding unnecessary 429s. An optional `VITE_GOOGLE_BOOKS_API_KEY` env var authenticates requests when higher rate limits are needed.
 - **CSS transition animation** — the click-to-detail animation uses CSS transitions on `top`, `left`, `transform`, and `opacity`. The flying book's base size is set from the grid item's `originRect`, so it always lands back at the exact same pixel size with no pop. Prev/next arrows flank the flying book rather than sitting in a top-right button bar.
 - **Navigation exit uses exiting book's own dimensions** — `navExitRectRef` preserves the leaving book's grid rect so the exit container matches the correct aspect ratio, preventing warping during the exit animation.
-- **Build-time cover cache** — a `prebuild` script (`scripts/download-covers.ts`) fetches all cover images and pre-computes aspect ratios during build. Images are saved to `public/covers/` and served as static assets. The app checks `cover-manifest.json` first at runtime, skipping live API calls entirely for existing books. Covers not in the manifest (e.g., added later via the admin tool) still fall through to the live OpenLibrary/Google Books APIs. Stale cover images from removed books are automatically cleaned up on each build.
+- **Build-time cover cache** — a `prebuild` script (`scripts/download-covers.ts`) fetches all cover images and pre-computes aspect ratios during build. Images are saved to `public/covers/` and served as static assets. The manifest (`cover-manifest.json`) keys books by ISBN for stable lookups — reordering books in the admin tool no longer affects cover assignments. The app checks `cover-manifest.json` first at runtime, skipping live API calls entirely for existing books. Covers not in the manifest (e.g., added later via the admin tool) still fall through to the live OpenLibrary/Goodreads/Google Books APIs. Stale cover images from removed books are automatically cleaned up on each build.
+- **Cover lock system** — setting `coverLocked: true` on a book tells the download script to skip that book and preserve the existing file in `public/covers/`, only re-measuring its dimensions for the manifest. This protects manually-placed, high-quality cover images from being overwritten during rebuilds. A custom cover upload button (dev-only) in the admin tool writes user-selected images directly to `public/covers/` via `POST /api/upload-cover` and auto-sets the lock flag. The file persists in production because it lives in `public/covers/` — no server-side code needed beyond the Vite dev-server middleware.
 - **Dynamic cover aspect ratio** — cover aspect ratio is determined by the actual downloaded image, not hardcoded to 2:3. Validated via `Image()` load and stored in a module-level `aspectRatioCache`.
 - **Blob URL image cache** — validated cover images are drawn to a canvas and stored as blob URLs (`URL.createObjectURL`). Every `<img>` element resolves from memory instantly, eliminating re-download flashes during navigation.
 - **Robust API fallback** — each external API (OpenLibrary search, Google Books) is wrapped in its own try-catch. If OpenLibrary returns a 500 or CORS error, the code falls through to Google Books instead of skipping the entire fetch.

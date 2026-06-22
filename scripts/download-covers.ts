@@ -1,7 +1,7 @@
 import { RAW_BOOKS } from '../src/books';
 import { imageSizeFromFile } from 'image-size/fromFile';
 import { writeFile, mkdir, readdir, unlink, rename } from 'fs/promises';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
 const COVERS_DIR = 'public/covers';
 const MANIFEST_FILE = 'src/generated/cover-manifest.json';
@@ -51,7 +51,19 @@ async function main() {
   let skipped = 0;
 
   for (const book of RAW_BOOKS) {
-    const dest = `${COVERS_DIR}/${book.id}.jpg`;
+    const key = book.isbn || book.id;
+    const dest = `${COVERS_DIR}/${key}.jpg`;
+
+    // If cover is locked and file already exists, skip download — just measure dimensions
+    if (book.coverLocked && existsSync(dest)) {
+      try {
+        const dims = await imageSizeFromFile(dest);
+        manifest[key] = { path: `/covers/${key}.jpg`, aspectRatio: dims.width / dims.height };
+        found++;
+        console.log(`  🔒 ${book.title} — locked, using existing file (${dims.width}x${dims.height})`);
+        continue;
+      } catch {}
+    }
 
     // Collect candidate URLs, try them in order
     const candidates: string[] = [];
@@ -95,7 +107,7 @@ async function main() {
 
         if (dims.height >= MIN_COVER_HEIGHT) {
           await rename(tmp, dest);
-          manifest[book.id] = { path: `/covers/${book.id}.jpg`, aspectRatio: dims.width / dims.height };
+          manifest[key] = { path: `/covers/${key}.jpg`, aspectRatio: dims.width / dims.height };
           found++;
           accepted = true;
           console.log(`  ✓ ${book.title} — ${cand.split('/').pop()} (${dims.width}x${dims.height})`);
@@ -115,19 +127,19 @@ async function main() {
 
     if (!accepted) {
       if (bestArea > 0) {
-        manifest[book.id] = { path: `/covers/${book.id}.jpg`, aspectRatio: bestAspectRatio };
+        manifest[key] = { path: `/covers/${key}.jpg`, aspectRatio: bestAspectRatio };
         found++;
         console.log(`  ~ ${book.title} — low-res fallback (${Math.round(Math.sqrt(bestArea))}px equiv.)`);
       } else {
         console.log(`  ✗ ${book.title} — all sources failed`);
-        manifest[book.id] = { path: null, aspectRatio: null };
+        manifest[key] = { path: null, aspectRatio: null };
         skipped++;
       }
     }
   }
 
   // Clean up old cover images not in the current book set
-  const currentIds = new Set(RAW_BOOKS.map(b => b.id));
+  const currentIds = new Set(RAW_BOOKS.map(b => b.isbn || b.id));
   try {
     const files = await readdir(COVERS_DIR);
     for (const f of files) {
