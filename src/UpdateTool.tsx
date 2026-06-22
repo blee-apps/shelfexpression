@@ -1067,13 +1067,18 @@ export default function UpdateTool({ onClose, books }: Props) {
             }}>Vitsoe</button>
           </div>
           <div style={{ width: 1, height: 20, background: '#ddd' }} />
-          <button onClick={() => {
-            const allSelected = slots.every((s, i) => !s || selectedForShare.has(i));
-            if (allSelected) setSelectedForShare(new Set());
-            else setSelectedForShare(new Set(slots.map((_, i) => slots[i] ? i : -1).filter(i => i >= 0).slice(0, 12)));
-          }} style={btnStyle({ secondary: true, small: true })}>
-            {slots.every((s, i) => !s || selectedForShare.has(i)) ? 'Deselect All' : 'Select All'}
-          </button>
+          {(() => {
+            const maxSel = Math.min(12, slots.filter(s => s !== null).length);
+            const allSelected = maxSel > 0 && selectedForShare.size >= maxSel;
+            return (
+              <button onClick={() => {
+                if (allSelected) setSelectedForShare(new Set());
+                else setSelectedForShare(new Set(slots.map((_, i) => slots[i] ? i : -1).filter(i => i >= 0).slice(0, 12)));
+              }} style={btnStyle({ secondary: true, small: true })}>
+                {allSelected ? 'Deselect All' : 'Select All'}
+              </button>
+            );
+          })()}
           <div style={{ flex: 1 }} />
           <button onClick={generateShareJpg} disabled={selectedForShare.size === 0}
             style={btnStyle({ small: true })}>
