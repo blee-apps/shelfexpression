@@ -302,7 +302,7 @@ export default function UpdateTool({ onClose, books }: Props) {
       const coverRatio = cover ? cover.naturalWidth / cover.naturalHeight : 2 / 3;
       const coverH = Math.min(coverW / coverRatio, 780);
       const coverX = (W - coverW) / 2;
-      const coverY = 120;
+      const coverY = 100;
 
       if (cover) {
         ctx.save();
@@ -313,7 +313,7 @@ export default function UpdateTool({ onClose, books }: Props) {
         ctx.restore();
       }
 
-      const textStartY = coverY + coverH + 80;
+      const textStartY = coverY + coverH + 100;
 
       const textMaxW = 880;
       const textX = (W - textMaxW) / 2;
