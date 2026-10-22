@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+/* Keep Tailwind v3 default border color after the v4 upgrade */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
