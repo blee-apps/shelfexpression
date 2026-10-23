@@ -145,7 +145,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
       </div>
 
       <div className="share-body" style={{ flex: 1, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 20, padding: 16, justifyContent: 'center', alignItems: 'flex-start' }}>
-        <div className="share-preview" style={{ flex: '1 1 360px', display: 'flex', justifyContent: 'center', position: 'sticky', top: 0 }}>
+        <div className="share-preview" style={{ flex: '1 1 360px', display: 'flex', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', height: '100%', minHeight: 0, position: 'sticky', top: 0 }}>
           <div style={{ position: 'relative', lineHeight: 0 }}>
             <canvas ref={canvasRef} width={size.w} height={size.h}
               style={{ maxWidth: '100%', maxHeight: 'min(74vh, 900px)', width: 'auto', height: 'auto', aspectRatio: `${size.w} / ${size.h}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', background: '#fff' }} />
@@ -247,7 +247,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         @media (max-width: 700px) {
           /* Preview stays put at the top; the options scroll underneath it. */
           .share-body { flex-direction: column; flex-wrap: nowrap !important; align-items: stretch !important; padding: 0 !important; gap: 0 !important; overflow: hidden !important; }
-          .share-preview { position: static !important; flex: none !important; padding: 12px; border-bottom: 1px solid #e2e2e2; }
+          .share-preview { position: static !important; flex: none !important; height: auto !important; padding: 12px; border-bottom: 1px solid #e2e2e2; }
           .share-preview canvas { max-height: 42vh !important; }
           .share-controls { max-width: none !important; flex: 1 1 auto !important; min-height: 0; overflow-y: auto; padding: 12px 12px max(16px, env(safe-area-inset-bottom)) !important; gap: 12px !important; }
           .share-studio input { font-size: 16px !important; }
