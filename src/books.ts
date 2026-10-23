@@ -1,5 +1,6 @@
-// Your books live in content/books.json. This file just reads them in.
-import content from '../content/books.json';
+// Your books live in content/books.json. This file just reads them in
+// (or the copy inside index.html on a site made with Create Static Site).
+import { SHELF_CONTENT as content } from './shelfData';
 
 export interface Book {
   id: string; isbn: string; title: string; author: string;

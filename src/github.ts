@@ -1,6 +1,6 @@
 // The GitHub key the editor uses on the live site. It's a fine-grained
 // personal access token limited to this one repo, kept only on this device.
-import { SITE } from '../content/site';
+import { SITE } from './shelfData';
 
 const STORAGE_KEY = 'bookshelf.githubToken';
 

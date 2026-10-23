@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { writeFile, readFile, cp } from 'fs/promises'
+import { writeFile, readFile, cp, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { goodreadsHandler, coverHandler } from './server/lookup.js'
@@ -49,8 +49,26 @@ const coversPlugin = {
   },
 };
 
+// Lists the built files in site-files.json, so Create Static Site in the
+// editor knows what to put in the zip. Covers are added from the shelf itself.
+const siteFilesPlugin = {
+  name: 'site-files',
+  apply: 'build' as const,
+  async closeBundle() {
+    const dir = 'dist';
+    if (!existsSync(dir)) return;
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+    const files = entries
+      .filter(e => e.isFile())
+      .map(e => `${e.parentPath ?? (e as any).path}/${e.name}`.slice(dir.length + 1).split('\\').join('/'))
+      .filter(f => !f.startsWith('covers/') && !f.startsWith('.') && !f.includes('/.') && !f.endsWith('.map') && f !== 'site-files.json')
+      .sort();
+    await writeFile(`${dir}/site-files.json`, JSON.stringify({ files }, null, 2) + '\n');
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), coversPlugin, {
+  plugins: [react(), coversPlugin, siteFilesPlugin, {
     name: 'cover-upload',
     configureServer(server) {
       server.middlewares.use('/api/upload-cover', (req, res) => {

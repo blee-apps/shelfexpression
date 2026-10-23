@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste } from 'lucide-react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER } from './books';
 import ShareStudio from './share/ShareStudio';
-import shelfContent from '../content/books.json';
-import { SITE } from '../content/site';
+import StaticSitePanel from './StaticSitePanel';
+import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
 import { getToken } from './github';
 import { pendingCovers, coverSrc, addPendingCover, fetchCover, resizeCover, describeChanges, publish, PublishError, PublishResult,
   markCoversPublished, canonicalShelf, fetchLatestShelf, fetchPublishedCover, deployStatus, Deploy, Draft, loadDraft, saveDraft, clearDraft, restoreDraftCovers } from './publish';
-import coverManifest from './generated/cover-manifest.json';
 import { searchBooks, measureImage, BookResult, CoverCandidate } from './bookSearch';
 
 interface Props {
@@ -124,6 +123,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
   const [studioOpen, setStudioOpen] = useState(false);
+  const [staticOpen, setStaticOpen] = useState(false);
   // Footer line on share images. Starts as the site address, then remembers
   // what you type (on this device right away, and in books.json on publish).
   const [shareFooter, setShareFooter] = useState<string | undefined>(() => {
@@ -338,7 +338,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     const cached = coverCache.get(book.id);
     if (cached) { try { return await loadImg(cached); } catch {} }
     if (book.coverUrl) { try { return await loadImg(coverSrc(book.coverUrl)); } catch {} }
-    const m = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest] as { path: string | null } | undefined;
+    const m = coverManifest[book.isbn || book.id] as { path: string | null } | undefined;
     if (m?.path) { try { return await loadImg(m.path); } catch {} }
     return null;
   };
@@ -397,7 +397,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     if (!book) return null;
     if (book.coverUrl) return { url: book.coverUrl, preview: pendingCovers.has(book.coverUrl) ? coverSrc(book.coverUrl) : undefined, label: 'Current', isCurrent: true };
     // No override: the site uses the build-time cover. Keep it that way unless changed.
-    const local = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest] as { path: string | null } | undefined;
+    const local = coverManifest[book.isbn || book.id] as { path: string | null } | undefined;
     const preview = coverCache.get(book.id) || local?.path || undefined;
     return { url: '', preview, label: 'Current (automatic)', isCurrent: true };
   };
@@ -917,7 +917,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       {/* GUEST MODE */}
       {guest && !shareMode && (
         <div style={{ padding: '10px 20px', borderBottom: '1px solid #eee', flexShrink: 0, background: '#fafafa', fontSize: '0.8rem', color: '#555', lineHeight: 1.45 }}>
-          <b style={{ color: '#1a1a1a' }}>Guest mode.</b> Look around and make share images. Your edits aren’t saved or published.
+          {IS_STATIC_SITE
+            ? <><b style={{ color: '#1a1a1a' }}>Static site.</b> Edit your books, then use Create Static Site to download the updated site and upload it again.</>
+            : <><b style={{ color: '#1a1a1a' }}>Guest mode.</b> Look around, make share images, or create a static site. Nothing is published.</>}
         </div>
       )}
 
@@ -1017,6 +1019,21 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
             </div>
             <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={btnStyle({ small: true })}>Make a share image</button>
+          </div>
+        )}
+
+        {/* HOST IT YOURSELF */}
+        {!shareMode && (
+          <div className="admin-static-card" style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', marginBottom: 16, background: '#fafafa',
+          }}>
+            <Globe size={18} style={{ color: '#555', flexShrink: 0 }} />
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Host it yourself</div>
+              <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Download your shelf as a website for any web host. No GitHub needed.</div>
+            </div>
+            <button onClick={() => setStaticOpen(true)} style={btnStyle({ small: true })}>Create Static Site</button>
           </div>
         )}
 
@@ -1243,6 +1260,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             setStudioOpen(false);
           }}
         />
+      )}
+
+      {staticOpen && (
+        <StaticSitePanel bookCount={filledCount} onClose={() => setStaticOpen(false)}
+          getContent={() => JSON.parse(buildJson())} />
       )}
 
       {/* EDIT MODAL */}
@@ -1611,7 +1633,7 @@ function BookCover({ book }: { book: Book }) {
       const candidates: string[] = [];
 
       // Check local cover manifest first
-      const local = coverManifest[(book.isbn || book.id) as keyof typeof coverManifest];
+      const local = coverManifest[book.isbn || book.id];
       if (local) {
         const p = (local as { path: string | null }).path;
         if (p) candidates.push(p);

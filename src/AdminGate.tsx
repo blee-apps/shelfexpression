@@ -4,7 +4,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { X } from 'lucide-react';
 import { Book } from './books';
-import { SITE } from '../content/site';
+import { SITE, IS_STATIC_SITE } from './shelfData';
 import { getToken, saveToken, forgetToken, checkToken } from './github';
 
 const UpdateTool = lazy(() => import('./UpdateTool'));
@@ -12,14 +12,16 @@ const UpdateTool = lazy(() => import('./UpdateTool'));
 interface Props { onClose: () => void; books: Book[] }
 
 export default function AdminGate({ onClose, books }: Props) {
-  const [state, setState] = useState<'checking' | 'locked' | 'open' | 'guest'>(import.meta.env.DEV ? 'open' : 'checking');
+  const [state, setState] = useState<'checking' | 'locked' | 'open' | 'guest'>(
+    // A static site has nothing to publish to, so its editor opens as a guest.
+    IS_STATIC_SITE ? 'guest' : import.meta.env.DEV ? 'open' : 'checking');
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   // A key saved on this device is checked again, in case it expired.
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    if (import.meta.env.DEV || IS_STATIC_SITE) return;
     const saved = getToken();
     if (!saved) { setState('locked'); return; }
     checkToken(saved).then(res => {
@@ -90,15 +92,15 @@ export default function AdminGate({ onClose, books }: Props) {
             {SITE.github.repo && <p style={{ fontSize: '0.72rem', color: '#999', lineHeight: 1.5, margin: '12px 0 0' }}>
               Make one at github.com → Settings → Developer settings → Fine-grained tokens. Choose only this repo, and give it Contents: Read and write.
             </p>}
-            <div style={{ borderTop: '1px solid #eee', margin: '16px 0 0', paddingTop: 14 }}>
+            {SITE.guestMode && <div style={{ borderTop: '1px solid #eee', margin: '16px 0 0', paddingTop: 14 }}>
               <button onClick={() => setState('guest')}
                 style={{ width: '100%', padding: '9px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', color: '#1a1a1a', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer' }}>
                 Continue as guest
               </button>
               <p style={{ fontSize: '0.72rem', color: '#999', lineHeight: 1.5, margin: '8px 0 0', textAlign: 'center' }}>
-                Try the editor and make share images. Nothing is published.
+                Try the editor, make share images or a static site. Nothing is published.
               </p>
-            </div>
+            </div>}
           </>
         )}
       </div>
