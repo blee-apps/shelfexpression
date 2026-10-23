@@ -892,8 +892,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Manrope", sans-serif',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* HEADER */}
-      <div style={{
+      {/* HEADER (Share Studio replaces it with its own) */}
+      {!shareMode && <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 8,
         padding: '12px 20px', borderBottom: '1px solid #eee', flexShrink: 0,
@@ -912,7 +912,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           )}
           <button onClick={onClose} style={btnStyle({ small: true })}><X size={14} /></button>
         </div>
-      </div>
+      </div>}
 
       {/* GUEST MODE */}
       {guest && !shareMode && (
@@ -957,7 +957,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       )}
 
       {/* UNPUBLISHED DRAFT */}
-      {draftOffer && (
+      {draftOffer && !shareMode && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
           padding: '10px 20px', borderBottom: '1px solid #f0e0b0', flexShrink: 0, background: '#fff8e6',
@@ -970,16 +970,19 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         </div>
       )}
 
+      {/* SHARE STUDIO: takes over the screen with one toolbar */}
       {shareMode && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 20px', borderBottom: '1px solid #eee', flexShrink: 0,
-          background: '#fafafa',
+          padding: '10px 16px', paddingTop: 'max(10px, env(safe-area-inset-top))', borderBottom: '1px solid #eee', flexShrink: 0,
         }}>
-          <button onClick={() => { setShareMode(false); setSelectedForShare(new Set()); }} style={btnStyle({ secondary: true, small: true })}>Done</button>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1a1a1a' }}>
-            {selectedForShare.size ? `${selectedForShare.size} of 12 picked` : 'Pick up to 12 books'}
-          </span>
+          <button onClick={() => { setShareMode(false); setSelectedForShare(new Set()); }} style={btnStyle({ secondary: true, small: true })} aria-label="Close Share Studio"><X size={14} /></button>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.2 }}>
+            <h1 style={{ fontSize: '1.05rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Share Studio</h1>
+            <span style={{ fontSize: '0.75rem', color: '#888', whiteSpace: 'nowrap' }}>
+              {selectedForShare.size ? `${selectedForShare.size} of 12 picked` : 'Pick up to 12 books'}
+            </span>
+          </div>
           {(() => {
             const maxSel = Math.min(12, slots.filter(s => s !== null).length);
             const allSelected = maxSel > 0 && selectedForShare.size >= maxSel;
@@ -1031,7 +1034,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           </div>
         )}
 
-        {(import.meta.env.DEV || showAdvanced) && <>
+        {(import.meta.env.DEV || showAdvanced) && !shareMode && <>
         {/* LOAD SECTION */}
         <div style={{
           background: '#f8f8f8', border: '1px solid #eee', borderRadius: 8,
@@ -1156,6 +1159,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           ))}
         </div>
 
+        {/* Editing extras, hidden while picking books to share */}
+        {!shareMode && <>
         <div style={{ fontSize: '0.8rem', color: '#999', textAlign: 'center', margin: '-6px 0 20px' }}>
           {filledCount}/{SLOT_COUNT} slots used
         </div>
@@ -1197,6 +1202,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             The app will reload with your updated selection.
           </div>
         </div>}
+        </>}
       </div>
 
       <style>{`
