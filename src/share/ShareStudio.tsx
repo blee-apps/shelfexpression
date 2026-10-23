@@ -1,9 +1,9 @@
 // Full-screen share studio: a live preview of the share image, with options
 // for size, layout, background and text, and a button to share or save it.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { X, Share2, Download, GripVertical, ChevronLeft } from 'lucide-react';
 import type { Book } from '../books';
-import { renderShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
+import { renderShare, morphShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 
 const OPTIONS_KEY = 'bookshelf.shareOptions';
 
@@ -73,15 +73,39 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     setTintId(order[(tintIndex + d + order.length) % order.length].id);
   };
 
-  // Redraw whenever anything changes.
-  useEffect(() => {
+  // Redraw whenever anything changes. A change of layout, order, alignment or
+  // titles glides the covers to their new places; anything else redraws at once.
+  const lastDrawn = useRef<{ books: ShareBook[]; opts: ShareOptions; tint: string } | null>(null);
+  const stopMorph = useRef<(() => void) | null>(null);
+  // A layout effect, so a size change never paints an empty canvas first.
+  useLayoutEffect(() => {
     if (busy || !fontsReady || !canvasRef.current) return;
+    const canvas = canvasRef.current;
     const tint = opts.bg === 'cover' ? coverColor(tintImg) : null;
-    renderShare(canvasRef.current, shareBooks, { ...opts, layout, footer }, tint);
+    const next = { ...opts, layout, footer };
+    const prev = lastDrawn.current;
+    const same = (a: ShareBook[], b: ShareBook[]) => a.length === b.length && a.every((x, i) => x.img === b[i].img && x.title === b[i].title);
+    // Nothing that shows has changed (a re-render): leave the canvas, and any
+    // glide in progress, alone.
+    if (prev && JSON.stringify(prev.opts) === JSON.stringify(next) && prev.tint === String(tint) && same(prev.books, shareBooks)) return;
+    lastDrawn.current = { books: shareBooks, opts: next, tint: String(tint) };
+    stopMorph.current?.();
+    stopMorph.current = null;
+    const saveBlob = () => { blobRef.current = null; canvas.toBlob(b => { blobRef.current = b; }, 'image/jpeg', 0.92); };
+    const moved = prev && prev.opts.bg === next.bg && (
+      prev.opts.size !== next.size || prev.opts.layout !== next.layout || prev.opts.align !== next.align || prev.opts.titles !== next.titles
+      || !same(prev.books, shareBooks));
+    if (!moved || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      canvas.style.aspectRatio = `${SIZES[next.size].w} / ${SIZES[next.size].h}`;
+      renderShare(canvas, shareBooks, next, tint);
+      saveBlob();
+      return;
+    }
     blobRef.current = null;
-    canvasRef.current.toBlob(b => { blobRef.current = b; }, 'image/jpeg', 0.92);
+    stopMorph.current = morphShare(canvas, prev!.books, prev!.opts, shareBooks, next, tint, 480, () => { stopMorph.current = null; saveBlob(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy, fontsReady, order, opts, footer, imgs, tintImg]);
+  useEffect(() => () => stopMorph.current?.(), []);
 
   const getBlob = async () => blobRef.current
     || await new Promise<Blob | null>(r => canvasRef.current ? canvasRef.current.toBlob(r, 'image/jpeg', 0.92) : r(null));
