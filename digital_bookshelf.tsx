@@ -1050,16 +1050,20 @@ export default function App() {
               ref={bookElRef}
               className="fixed top-0 left-0 z-50 pointer-events-auto"
               style={{
-                ...(navPhase === 'enter' && !enterReady ? getEnterInitStyle() : getFlyingBookStyle()),
+                // While the sliding copy gets ready, hold the old cover exactly where
+                // it is (originRect already points at the next book, so the normal
+                // style would start resizing it in place).
+                ...(navPhase === 'exit' ? { ...getExitInitStyle(), transition: 'none' }
+                  : navPhase === 'enter' && !enterReady ? getEnterInitStyle() : getFlyingBookStyle()),
                 opacity: closingFade ? 0 : 1,
-                ...(navPhase === 'enter' && !enterReady ? {} : { transition: flyerTransition }),
+                ...(navPhase === 'exit' || (navPhase === 'enter' && !enterReady) ? {} : { transition: flyerTransition }),
               } as React.CSSProperties}
               onTransitionEnd={(e) => {
                 // Close is finished when the cover has actually landed on the shelf.
                 if (animState === 'closing' && e.target === e.currentTarget && e.propertyName === 'transform') finishClose();
               }}
             >
-              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xs overflow-hidden">
+              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xs overflow-hidden" style={navPhase === 'exit' ? { boxShadow: 'none' } : undefined}>
                 <DynamicCover book={selectedBook} eager />
               </div>
             </div>
