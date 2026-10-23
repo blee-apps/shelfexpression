@@ -671,7 +671,7 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (EDITOR_AVAILABLE && (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'U' || e.key === 'u')) {
+      if (EDITOR_AVAILABLE && (e.metaKey || e.ctrlKey) && e.shiftKey && (e.code === 'KeyU' || e.key === 'U' || e.key === 'u')) {
         e.preventDefault();
         setShowAdmin(v => !v);
         return;
