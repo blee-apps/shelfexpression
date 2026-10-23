@@ -14,6 +14,11 @@ export const RAW_BOOKS: RawBook[] = content.books;
 
 export const USE_VITSOE_SHELF: boolean = content.useVitsoeShelf;
 
+// Light, dark, or auto (follows each visitor's device setting).
+export type ColorMode = 'light' | 'dark' | 'auto';
+const mode = (content as { colorMode?: string }).colorMode;
+export const COLOR_MODE: ColorMode = mode === 'dark' || mode === 'auto' ? mode : 'light';
+
 // Footer line for share images, once you've set one in the editor.
 export const SHARE_FOOTER: string | undefined = (content as { share?: { footer?: string } }).share?.footer;
 

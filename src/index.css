@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* Dark mode follows a .dark class on the gallery, set from content/books.json */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Keep Tailwind v3 default border color after the v4 upgrade */
 @layer base {
   *,

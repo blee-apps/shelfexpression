@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, USE_VITSOE_SHELF } from './src/books';
+import { Book, BOOKS, USE_VITSOE_SHELF, COLOR_MODE } from './src/books';
 import { SITE } from './content/site';
 import coverManifest from './src/generated/cover-manifest.json';
 
@@ -217,6 +217,28 @@ const useViewport = () => {
   return vp;
 };
 
+// --- COLOR MODE ---
+// True when the site should be dark: always, never, or following the
+// visitor's device setting when the mode is 'auto'.
+const useDarkMode = () => {
+  const query = '(prefers-color-scheme: dark)';
+  const [systemDark, setSystemDark] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(query).matches);
+  useEffect(() => {
+    if (COLOR_MODE !== 'auto') return;
+    const mq = window.matchMedia(query);
+    const on = () => setSystemDark(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const dark = COLOR_MODE === 'dark' || (COLOR_MODE === 'auto' && systemDark);
+  // The page behind the app (seen when scrolling past the ends) and the browser chrome match.
+  useEffect(() => {
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    document.body.style.background = dark ? '#121212' : '#FDFDFD';
+  }, [dark]);
+  return dark;
+};
+
 // --- SHELF STRUCTURE (Vitsoe 606-style, purely decorative) ---
 
 // Measures the books grid rows and the grid's own offsetTop from its parent
@@ -325,6 +347,7 @@ const HOVER_LIFT = 0.2;    // lift by 20% of the cover height
 const HOVER_SCALE = 1.08;
 
 export default function App() {
+  const dark = useDarkMode();
 
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [originRect, setOriginRect] = useState<DOMRect | null>(null);
@@ -685,7 +708,7 @@ export default function App() {
 
   return (
     <div
-      className={`h-screen w-screen bg-[#FDFDFD] text-gray-900 overflow-x-hidden ${selectedBook ? 'overflow-y-hidden' : 'overflow-y-auto'} font-sans relative selection:bg-gray-900 selection:text-white flex flex-col`}
+      className={`${dark ? 'dark ' : ''}h-screen w-screen bg-[#FDFDFD] dark:bg-[#121212] text-gray-900 dark:text-neutral-100 overflow-x-hidden ${selectedBook ? 'overflow-y-hidden' : 'overflow-y-auto'} font-sans relative selection:bg-gray-900 dark:selection:bg-neutral-100 selection:text-white dark:selection:text-neutral-900 flex flex-col`}
       style={{ scrollbarGutter: 'stable' }}
     >
 
@@ -775,6 +798,28 @@ export default function App() {
             0 12px 16px -6px rgba(0,0,0,0.22),
             0 28px 36px -14px rgba(0,0,0,0.14);
         }
+        /* Dark: a charcoal wall with graphite tracks and shelves, matching the share image's Dark shelf */
+        .dark .shelf-wall { background: #1b1b1c; }
+        .dark .shelf-track {
+          background: linear-gradient(to right, #3e3f42 0, #6d6f73 1px, #7a7c80 50%, #66686c calc(100% - 1px), #3e3f42 100%);
+          box-shadow: 2px 0 4px rgba(0,0,0,0.35);
+        }
+        .dark .shelf-track::before {
+          background: repeating-linear-gradient(to bottom, rgba(0,0,0,0.45) 0 7px, transparent 7px 16px);
+        }
+        .dark .shelf {
+          background: linear-gradient(to bottom,
+            #3c3d41 0, #4a4b4f var(--surface),
+            #55575b var(--surface), #36373a calc(var(--surface) + 2px), #2e2f32 60%, #202124 100%);
+          box-shadow:
+            0 1px 1px rgba(0,0,0,0.4),
+            0 12px 16px -6px rgba(0,0,0,0.55),
+            0 28px 36px -14px rgba(0,0,0,0.45);
+        }
+        .dark .book-hover-vitsoe {
+          filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)) drop-shadow(3px -2px 10px rgba(0,0,0,0.35));
+        }
+
         /* Seam where the two bays' shelves meet at the middle track */
         @media (min-width: 768px) {
           .shelf::after {
@@ -785,24 +830,25 @@ export default function App() {
             width: 1px;
             background: rgba(0,0,0,0.10);
           }
+          .dark .shelf::after { background: rgba(0,0,0,0.5); }
         }
       `}</style>
 
-      <header ref={headerRef} className={`w-full py-6 px-6 md:px-12 flex items-center justify-between border-b border-gray-100 transition-opacity duration-300 ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <header ref={headerRef} className={`w-full py-6 px-6 md:px-12 flex items-center justify-between border-b border-gray-100 dark:border-white/10 transition-opacity duration-300 ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {SITE.url ? (
-          <a href={SITE.url} className="font-semibold text-lg tracking-tight hover:text-gray-600 transition-colors">
+          <a href={SITE.url} className="font-semibold text-lg tracking-tight hover:text-gray-600 dark:hover:text-neutral-300 transition-colors">
             {SITE.name}
           </a>
         ) : (
           <span className="font-semibold text-lg tracking-tight">{SITE.name}</span>
         )}
-        <nav className="hidden md:flex space-x-6 text-sm text-gray-600">
+        <nav className="hidden md:flex space-x-6 text-sm text-gray-600 dark:text-neutral-400">
           {SITE.nav.map(link => link.current
-            ? <span key={link.label} className="text-gray-900 font-medium">{link.label}</span>
-            : <a key={link.label} href={link.href} className="hover:text-gray-900 transition-colors">{link.label}</a>)}
+            ? <span key={link.label} className="text-gray-900 dark:text-neutral-100 font-medium">{link.label}</span>
+            : <a key={link.label} href={link.href} className="hover:text-gray-900 dark:hover:text-white transition-colors">{link.label}</a>)}
         </nav>
         {SITE.nav.length > 0 && <button
-          className="md:hidden p-2 text-gray-600 hover:text-gray-900 transition-colors"
+          className="md:hidden p-2 text-gray-600 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           onClick={() => setMobileMenuOpen(v => !v)}
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
         >
@@ -830,23 +876,23 @@ export default function App() {
         </button>}
         {/* Full-screen menu: always mounted so it can fade in and out */}
         <div
-          className={`fixed inset-0 z-[80] bg-[#FDFDFD] flex flex-col md:hidden ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+          className={`fixed inset-0 z-[80] bg-[#FDFDFD] dark:bg-[#121212] flex flex-col md:hidden ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
           style={{ transition: mobileMenuOpen ? 'opacity 200ms ease-out' : 'opacity 180ms ease-in, visibility 0s linear 180ms' }}
           aria-hidden={!mobileMenuOpen}
         >
-            <div className="py-6 px-6 border-b border-gray-100 flex justify-end">
+            <div className="py-6 px-6 border-b border-gray-100 dark:border-white/10 flex justify-end">
               <button
-                className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
+                className="p-2 text-gray-600 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
                 aria-label="Close menu"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="flex flex-col items-end px-6 pt-8 space-y-6 text-base text-gray-600">
+            <nav className="flex flex-col items-end px-6 pt-8 space-y-6 text-base text-gray-600 dark:text-neutral-400">
               {SITE.nav.map(link => link.current
-                ? <span key={link.label} className="text-gray-900 font-medium">{link.label}</span>
-                : <a key={link.label} href={link.href} className="hover:text-gray-900 transition-colors" onClick={() => setMobileMenuOpen(false)}>{link.label}</a>)}
+                ? <span key={link.label} className="text-gray-900 dark:text-neutral-100 font-medium">{link.label}</span>
+                : <a key={link.label} href={link.href} className="hover:text-gray-900 dark:hover:text-white transition-colors" onClick={() => setMobileMenuOpen(false)}>{link.label}</a>)}
             </nav>
         </div>
       </header>
@@ -857,7 +903,7 @@ export default function App() {
         ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
       >
         <div className="mb-6 md:mb-6">
-          <h1 className="text-4xl md:text-5xl font-serif text-gray-900 mb-4 select-none"
+          <h1 className="text-4xl md:text-5xl font-serif text-gray-900 dark:text-neutral-100 mb-4 select-none"
             onClick={() => {
               const t = titleTapRef.current;
               t.count++;
@@ -867,7 +913,7 @@ export default function App() {
             }}>
             {SITE.title}
           </h1>
-          <p className="text-lg text-gray-600">{SITE.subtitle(BOOKS.length)}</p>
+          <p className="text-lg text-gray-600 dark:text-neutral-400">{SITE.subtitle(BOOKS.length)}</p>
         </div>
 
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
@@ -885,7 +931,7 @@ export default function App() {
                   key={book.id}
                   ref={el => { bookButtonRefs.current[book.id] = el; }}
                   aria-label={`${book.title} by ${book.author}`}
-                  className="vitsoe-book-wrapper block w-full p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900"
+                  className="vitsoe-book-wrapper block w-full p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100"
                   onClick={(e) => handleSelect(book, e)}
                   onPointerEnter={(e) => {
                     // Lift for a mouse or trackpad (or pen), not for a finger: on phones a tap would leave it stuck.
@@ -934,7 +980,7 @@ export default function App() {
                   ref={el => { shelfRefs.current[book.id] = el; bookButtonRefs.current[book.id] = el; }}
                   aria-label={`${book.title} by ${book.author}`}
                   onClick={(e) => handleSelect(book, e)}
-                  className={`block w-full p-0 bg-transparent border-0 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 relative overflow-hidden rounded-xs cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom ${grownId === book.id && animState === 'idle' ? 'scale-[1.03] drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)]' : 'drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]'}`}
+                  className={`block w-full p-0 bg-transparent border-0 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100 relative overflow-hidden rounded-xs cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom ${grownId === book.id && animState === 'idle' ? 'scale-[1.03] drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)]' : 'drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]'}`}
                   // Pointer events rather than CSS :hover, so it also works with an iPad trackpad.
                   onPointerEnter={(e) => { if (e.pointerType !== 'touch') setGrownId(book.id); }}
                   onPointerLeave={() => setGrownId(id => (id === book.id ? null : id))}
@@ -958,7 +1004,7 @@ export default function App() {
           {/* White backdrop: starts transparent and fades in, so the gallery is
               seen fading away behind it; fades out a little faster on close. */}
           <div
-            className={`absolute inset-0 bg-[#FDFDFD] ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 bg-[#FDFDFD] dark:bg-[#121212] ${animState === 'open' ? 'opacity-100' : 'opacity-0'}`}
             style={{ transition: animState === 'open' ? 'opacity 380ms ease-out' : 'opacity 340ms ease-in' }}
           />
 
@@ -999,7 +1045,7 @@ export default function App() {
           )}
 
           <div
-            className={`absolute right-0 bottom-0 w-full md:w-[55%] h-[52%] md:h-full flex flex-col justify-start md:justify-center p-8 md:p-16 z-40 bg-gradient-to-t from-[#FDFDFD] via-[#FDFDFD] to-transparent md:to-[#FDFDFD]/90 md:bg-[#FDFDFD] pointer-events-auto overflow-y-auto
+            className={`absolute right-0 bottom-0 w-full md:w-[55%] h-[52%] md:h-full flex flex-col justify-start md:justify-center p-8 md:p-16 z-40 bg-gradient-to-t from-[#FDFDFD] dark:from-[#121212] via-[#FDFDFD] dark:via-[#121212] to-transparent md:to-[#FDFDFD]/90 dark:md:to-[#121212]/90 md:bg-[#FDFDFD] dark:md:bg-[#121212] pointer-events-auto overflow-y-auto
               ${animState === 'open' ? 'opacity-100 translate-x-0 md:translate-y-0 translate-y-0' : 'opacity-0 translate-y-12 md:translate-y-0 md:translate-x-8'}`}
             style={{
               top: isMobile ? 'auto' : '0',
@@ -1010,19 +1056,19 @@ export default function App() {
             }}
           >
             <div key={selectedBook.id} className="max-w-md w-full mx-auto md:mx-0 book-text-in" style={{ marginTop: textMarginTop }}>
-              <h2 id="book-dialog-title" className="font-serif text-3xl md:text-5xl text-gray-900 mb-2 leading-tight drop-shadow-xs">
+              <h2 id="book-dialog-title" className="font-serif text-3xl md:text-5xl text-gray-900 dark:text-neutral-100 mb-2 leading-tight drop-shadow-xs">
                 {selectedBook.title}
               </h2>
 
-              <div className="font-sans text-gray-500 font-medium tracking-wide uppercase text-xs md:text-sm mb-6 flex items-center space-x-2">
+              <div className="font-sans text-gray-500 dark:text-neutral-400 font-medium tracking-wide uppercase text-xs md:text-sm mb-6 flex items-center space-x-2">
                 <span>{selectedBook.author}</span>
                 <span className="w-1 h-1 bg-gray-400 rounded-full" />
                 <span>{selectedBook.year}</span>
               </div>
 
-              <div className="w-8 h-[2px] bg-gray-900 mb-6" />
+              <div className="w-8 h-[2px] bg-gray-900 dark:bg-neutral-100 mb-6" />
 
-              <p className="font-sans text-gray-700 leading-relaxed text-base md:text-lg mb-8">
+              <p className="font-sans text-gray-700 dark:text-neutral-300 leading-relaxed text-base md:text-lg mb-8">
                 {selectedBook.synopsis}
               </p>
 
@@ -1030,7 +1076,7 @@ export default function App() {
                 href={`https://www.goodreads.com/book/show/${selectedBook.gr}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center space-x-2 text-sm font-semibold text-gray-900 border-b border-gray-900 pb-1 hover:text-gray-500 hover:border-gray-500 transition-colors"
+                className="inline-flex items-center space-x-2 text-sm font-semibold text-gray-900 dark:text-neutral-100 border-b border-gray-900 dark:border-neutral-100 pb-1 hover:text-gray-500 dark:hover:text-neutral-400 hover:border-gray-500 dark:hover:border-neutral-400 transition-colors"
               >
                 <span>View on Goodreads</span>
                 <ExternalLink className="w-4 h-4" />
@@ -1044,7 +1090,7 @@ export default function App() {
               type="button"
               onClick={handleClose}
               aria-label="Close"
-              className="p-3 rounded-full hover:bg-gray-100 transition-colors text-gray-800 bg-white/80 backdrop-blur-xs shadow-xs"
+              className="p-3 rounded-full hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors text-gray-800 dark:text-neutral-200 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-xs shadow-xs"
             >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
@@ -1059,7 +1105,7 @@ export default function App() {
                 onClick={() => navigateBooks('prev')}
                 disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === 0}
                 style={getNavArrowStyle('prev')}
-                className="book-arrow-in fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-xs hover:bg-gray-100 shadow-xs"
+                className="book-arrow-in fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 dark:text-neutral-200 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-xs hover:bg-gray-100 dark:hover:bg-neutral-700 shadow-xs"
               >
                 <ChevronLeft className="w-5 h-5" aria-hidden="true" />
               </button>
@@ -1069,7 +1115,7 @@ export default function App() {
                 onClick={() => navigateBooks('next')}
                 disabled={BOOKS.findIndex(b => b.id === selectedBook.id) === BOOKS.length - 1}
                 style={getNavArrowStyle('next')}
-                className="book-arrow-in fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 bg-white/80 backdrop-blur-xs hover:bg-gray-100 shadow-xs"
+                className="book-arrow-in fixed z-[60] p-3 rounded-full pointer-events-auto disabled:opacity-30 text-gray-800 dark:text-neutral-200 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-xs hover:bg-gray-100 dark:hover:bg-neutral-700 shadow-xs"
               >
                 <ChevronRight className="w-5 h-5" aria-hidden="true" />
               </button>
