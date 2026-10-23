@@ -21,7 +21,7 @@ interface Props {
   guest?: boolean;
 }
 
-const SLOT_COUNT = 24;
+const SLOT_COUNT = 48;
 // editingIndex value for a brand-new book, which goes in at the top.
 const NEW_BOOK = -2;
 // Keeps books together at the start, with the empty slots after them.
