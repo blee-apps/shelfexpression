@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { writeFile } from 'fs/promises'
+import { writeFile, readFile, cp } from 'fs/promises'
+import { existsSync } from 'fs'
 import type { IncomingMessage, ServerResponse } from 'http'
+import { goodreadsHandler, coverHandler } from './server/lookup.js'
 
 // Only the admin tool on this machine may use the dev endpoints, not other
 // websites open in your browser while the dev server is running.
@@ -22,8 +24,33 @@ const isImage = (body: Buffer) =>
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
+// Covers live in content/covers but are served at /covers/ on the site.
+// In dev they're read straight from that folder; on build they're copied
+// into dist/covers.
+const COVERS_DIR = 'content/covers';
+const coversPlugin = {
+  name: 'content-covers',
+  configureServer(server: any) {
+    server.middlewares.use('/covers', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+      const name = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\//, '');
+      if (!/^[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp)$/.test(name)) return next();
+      try {
+        const body = await readFile(`${COVERS_DIR}/${name}`);
+        res.setHeader('Content-Type', name.endsWith('.png') ? 'image/png' : name.endsWith('.webp') ? 'image/webp' : 'image/jpeg');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(body);
+      } catch {
+        next();
+      }
+    });
+  },
+  async writeBundle(options: { dir?: string }) {
+    if (existsSync(COVERS_DIR)) await cp(COVERS_DIR, `${options.dir || 'dist'}/covers`, { recursive: true });
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), {
+  plugins: [react(), coversPlugin, {
     name: 'cover-upload',
     configureServer(server) {
       server.middlewares.use('/api/upload-cover', (req, res) => {
@@ -71,7 +98,7 @@ export default defineConfig({
             return;
           }
           try {
-            const dest = `public/covers/${safeKey}.jpg`;
+            const dest = `content/covers/${safeKey}.jpg`;
             await writeFile(dest, body);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
@@ -83,45 +110,19 @@ export default defineConfig({
         });
       });
 
-      // Finds a book's Goodreads page. Goodreads has no public API, but
-      // goodreads.com/book/isbn/<ISBN> redirects to the right book page, so we
-      // follow that (tries each ISBN in turn). If no ISBN works, falls back to
-      // the first result of a Goodreads search for title + author.
-      server.middlewares.use('/api/goodreads', async (req, res) => {
-        if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
-        const url = new URL(req.url!, 'http://localhost');
-        const isbns = (url.searchParams.get('isbn') || '').split(',').map(s => s.replace(/[^0-9Xx]/g, '')).filter(s => s.length === 10 || s.length === 13).slice(0, 6);
-        const title = url.searchParams.get('title') || '';
-        const author = url.searchParams.get('author') || '';
-        const opts = { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) };
-        for (const isbn of isbns) {
-          try {
-            const r = await fetch(`https://www.goodreads.com/book/isbn/${isbn}`, { ...opts, redirect: 'manual' });
-            const loc = r.headers.get('location') || '';
-            const m = loc.match(/\/book\/show\/(\d+)/);
-            if (m) return sendJson(res, 200, { id: m[1], url: `https://www.goodreads.com/book/show/${m[1]}`, via: 'isbn' });
-          } catch {}
-        }
-        if (title) {
-          try {
-            const q = encodeURIComponent(`${title} ${author}`.trim());
-            const r = await fetch(`https://www.goodreads.com/search?q=${q}`, opts);
-            const html = await r.text();
-            // Among the top five results, take the one with the most ratings,
-            // which skips odd reprints and study guides that sometimes rank first.
-            let best: { id: string; ratings: number } | null = null;
-            for (const row of (html.match(/<tr itemscope[\s\S]*?<\/tr>/g) || []).slice(0, 5)) {
-              const id = row.match(/\/book\/show\/(\d+)/)?.[1];
-              const ratings = parseInt((row.match(/([\d,]+) ratings?/)?.[1] || '0').replace(/,/g, ''), 10);
-              if (id && (!best || ratings > best.ratings)) best = { id, ratings };
-            }
-            if (best) return sendJson(res, 200, { id: best.id, url: `https://www.goodreads.com/book/show/${best.id}`, via: 'search' });
-          } catch {}
-        }
-        sendJson(res, 404, { error: 'Not found' });
-      });
+      // Same handlers as the Vercel functions in api/, so dev matches the live site.
+      const useHandler = (path: string, handler: (r: Request) => Promise<Response>) =>
+        server.middlewares.use(path, async (req, res) => {
+          if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
+          const out = await handler(new Request(`http://localhost${req.originalUrl || req.url}`));
+          res.statusCode = out.status;
+          out.headers.forEach((v, k) => res.setHeader(k, v));
+          res.end(Buffer.from(await out.arrayBuffer()));
+        });
+      useHandler('/api/goodreads', goodreadsHandler);
+      useHandler('/api/cover', coverHandler);
 
-      // Saves a cover picked in the admin tool into public/covers, so the site
+      // Saves a cover picked in the admin tool into content/covers, so the site
       // serves its own copy instead of relying on another website.
       server.middlewares.use('/api/save-cover', async (req, res) => {
         if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
@@ -136,7 +137,7 @@ export default defineConfig({
           const body = Buffer.from(await r.arrayBuffer());
           if (body.length > 10 * 1024 * 1024) throw new Error('Image too large');
           if (!isImage(body)) throw new Error('Not a JPEG or PNG');
-          await writeFile(`public/covers/${safeKey}.jpg`, body);
+          await writeFile(`content/covers/${safeKey}.jpg`, body);
           sendJson(res, 200, { ok: true, path: `/covers/${safeKey}.jpg` });
         } catch (err: any) {
           sendJson(res, 502, { ok: false, error: err.message });

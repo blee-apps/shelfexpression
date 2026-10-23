@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "download-covers": "tsx scripts/download-covers.ts",
-    "prebuild": "npm run download-covers"
+    "measure-covers": "tsx scripts/measure-covers.ts",
+    "prebuild": "npm run measure-covers"
   },
   "dependencies": {
     "@fontsource/dm-serif-text": "^5.3.0",

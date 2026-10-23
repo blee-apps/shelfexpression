@@ -17,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "digital_bookshelf.tsx"]
+  "include": ["src", "content", "server", "api", "digital_bookshelf.tsx"]
 }
