@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { writeFile, readFile, cp, readdir } from 'fs/promises'
+import { writeFile, readFile, cp, readdir, rm } from 'fs/promises'
 import { existsSync } from 'fs'
+import { resolve } from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { goodreadsHandler, coverHandler } from './server/lookup.js'
+import { updateSiteFile, SiteDetails } from './server/siteFile.js'
 
 // Only the admin tool on this machine may use the dev endpoints, not other
 // websites open in your browser while the dev server is running.
@@ -45,17 +47,20 @@ const coversPlugin = {
     });
   },
   async writeBundle(options: { dir?: string }) {
+    if (process.env.SHELF_EXPORT_BUILD) return; // the export adds covers itself
     if (existsSync(COVERS_DIR)) await cp(COVERS_DIR, `${options.dir || 'dist'}/covers`, { recursive: true });
   },
 };
 
-// Lists the built files in site-files.json, so Create Static Site in the
+// Lists the built files in site-files.json, so Export site in the
 // editor knows what to put in the zip. Covers are added from the shelf itself.
+let outDir = 'dist';
 const siteFilesPlugin = {
   name: 'site-files',
   apply: 'build' as const,
+  configResolved(config: { build: { outDir: string } }) { outDir = config.build.outDir; },
   async closeBundle() {
-    const dir = 'dist';
+    const dir = outDir;
     if (!existsSync(dir)) return;
     const entries = await readdir(dir, { recursive: true, withFileTypes: true });
     const files = entries
@@ -67,8 +72,83 @@ const siteFilesPlugin = {
   },
 };
 
+// Export site from the local editor (npm run dev). The zip needs built files,
+// so /api/export-build makes a fresh build in a hidden folder and serves it
+// at /__export/. /api/save-shelf then keeps what you exported: your books,
+// look and share footer in content/books.json, and the site details in
+// content/site.ts. Those files are written without reloading the page.
+const EXPORT_DIR = 'node_modules/.cache/shelf-export';
+const readBody = (req: IncomingMessage, max = 5 * 1024 * 1024) => new Promise<string>((ok, fail) => {
+  let size = 0; const chunks: Buffer[] = [];
+  req.on('data', (c: Buffer) => { size += c.length; if (size > max) { fail(new Error('Too large')); req.destroy(); } else chunks.push(c); });
+  req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
+  req.on('error', fail);
+});
+const MIME: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', svg: 'image/svg+xml', woff2: 'font/woff2', woff: 'font/woff', png: 'image/png', jpg: 'image/jpeg', ico: 'image/x-icon', txt: 'text/plain' };
+const exportPlugin = {
+  name: 'local-export',
+  apply: 'serve' as const,
+  configureServer(server: any) {
+    let building: Promise<void> | null = null;
+    server.middlewares.use('/api/export-build', async (req: IncomingMessage, res: ServerResponse) => {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
+      if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      try {
+        building ??= (async () => {
+          const { build } = await import('vite');
+          process.env.SHELF_EXPORT_BUILD = '1';
+          try {
+            await rm(EXPORT_DIR, { recursive: true, force: true });
+            await build({ configFile: resolve('vite.config.ts'), mode: 'production', logLevel: 'warn', build: { outDir: EXPORT_DIR, emptyOutDir: true } });
+          } finally { delete process.env.SHELF_EXPORT_BUILD; }
+        })().finally(() => { building = null; });
+        await building;
+        sendJson(res, 200, { ok: true, base: '/__export/' });
+      } catch (err: any) {
+        sendJson(res, 500, { ok: false, error: `The build failed: ${err.message}` });
+      }
+    });
+    server.middlewares.use('/__export', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+      const name = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\/+/, '');
+      if (!name || name.includes('..')) return next();
+      try {
+        const body = await readFile(`${EXPORT_DIR}/${name}`);
+        res.setHeader('Content-Type', MIME[name.split('.').pop() || ''] || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(body);
+      } catch { next(); }
+    });
+    // Writes a file without the dev server reloading the page, then lets the
+    // next page load read the new version.
+    const quietWrite = async (file: string, text: string) => {
+      const abs = resolve(file);
+      server.watcher.unwatch(abs);
+      await writeFile(abs, text);
+      for (const m of server.moduleGraph.getModulesByFile(abs) ?? []) server.moduleGraph.invalidateModule(m);
+      setTimeout(() => server.watcher.add(abs), 1000);
+    };
+    server.middlewares.use('/api/save-shelf', async (req: IncomingMessage, res: ServerResponse) => {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
+      if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      try {
+        const { content, site } = JSON.parse(await readBody(req)) as { content: { books: unknown[] }; site: SiteDetails };
+        if (!content || !Array.isArray(content.books)) throw new Error('No books to save');
+        await quietWrite('content/books.json', JSON.stringify(content, null, 2) + '\n');
+        let siteSaved = false;
+        if (site) {
+          const next = updateSiteFile(await readFile('content/site.ts', 'utf8'), site);
+          if (next !== null) { await quietWrite('content/site.ts', next); siteSaved = true; }
+        }
+        sendJson(res, 200, { ok: true, siteSaved });
+      } catch (err: any) {
+        sendJson(res, 500, { ok: false, error: err.message });
+      }
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), coversPlugin, siteFilesPlugin, {
+  plugins: [react(), coversPlugin, siteFilesPlugin, exportPlugin, {
     name: 'cover-upload',
     configureServer(server) {
       server.middlewares.use('/api/upload-cover', (req, res) => {

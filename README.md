@@ -39,7 +39,7 @@ On the live site, it first asks for a GitHub key that can write to your repo. Ma
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**. Your changes are kept on the device as a draft until you publish, and you can restore or discard a draft the next time you open the editor.
 5. Tap **Publish**. The editor commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview.
 
-Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`. When you're done, tap **Generate**, paste the code into `content/books.json`, and commit. On the live site, the same tools sit under **Advanced: load or copy books.json** at the bottom of the editor.
+Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`. When you're done, tap **Generate**, paste the code into `content/books.json`, and commit. Or use **Export site**, which saves everything for you (see below). On the live site, the same tools sit under **Advanced: load or copy books.json** at the bottom of the editor.
 
 ### 5. Choose a look
 
@@ -65,7 +65,7 @@ On an iPhone, **Share** opens the share sheet, so you can save the image to Phot
 
 You don't need GitHub or Vercel to have a shelf. In the editor, tap **Export site** (under *Host it yourself*). Fill in your site name, link, heading, the line under it (`{count}` becomes the number of books) and up to five menu links, then tap **Download**.
 
-You get a zip with a complete website: your books, every cover, and your shelf style, mode and share footer. Unzip it and upload the folder to any web host, such as Netlify Drop, Cloudflare Pages, Neocities or your own server. Put it at the top of an address (like `books.example.com`), not in a subfolder.
+You get a zip with a complete website: your books, every cover, and your shelf style, mode and share footer. If you export from your own computer (`npm run dev`), the editor also saves your books, look and share footer into `content/books.json`, and the site details into `content/site.ts`. Next time you run it, everything is just as you left it. Unzip it and upload the folder to any web host, such as Netlify Drop, Cloudflare Pages, Neocities or your own server. Put it at the top of an address (like `books.example.com`), not in a subfolder.
 
 Turn on **Include the editor** to edit on that site later. It opens the same way (the keystroke or five taps), with no key and no Publish. Make your changes, tap **Export site** again, and upload the new folder over the old one. On a plain host, some covers can't be fetched from book sites, but uploading your own image always works.
 
