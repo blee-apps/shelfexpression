@@ -29,9 +29,18 @@ export const MOTION = {
   exit: 'cubic-bezier(0.4, 0, 1, 1)',       // things leaving (ease-in)
   openMs: 520,
   closeMs: 420,
-  navMs: 450,
+  navMs: 560,
   hoverMs: 350,
   hover: 'cubic-bezier(0.4, 0, 0.2, 1)',     // the original gentle pick-up easing
+};
+
+// Resolves once the cover image inside el is decoded and ready to paint
+// (or after 250ms at most, so a slow cover never blocks navigation).
+const coverReady = (el: HTMLElement | null): Promise<void> => {
+  const img = el?.querySelector('img');
+  if (!img) return Promise.resolve();
+  const decoded = img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+  return Promise.race([decoded, new Promise<void>(r => setTimeout(r, 250))]).then(() => {});
 };
 
 // --- COVER CACHES (shared with the admin tool) ---
@@ -524,9 +533,15 @@ export default function App() {
   useEffect(() => {
     if (navPhase === 'exit') {
       if (!exitReady) {
-        commitStyles(navElRef.current);
-        const f = requestAnimationFrame(() => setExitReady(true));
-        return () => cancelAnimationFrame(f);
+        // Wait for the sliding copy's cover to be decoded before it moves, so
+        // it never shows as a blank card. The old cover stays underneath till then.
+        let cancelled = false, f = 0;
+        coverReady(navElRef.current).then(() => {
+          if (cancelled) return;
+          commitStyles(navElRef.current);
+          f = requestAnimationFrame(() => setExitReady(true));
+        });
+        return () => { cancelled = true; cancelAnimationFrame(f); };
       }
       const t = setTimeout(() => {
         setSelectedBook(navTargetRef.current!);
@@ -537,9 +552,13 @@ export default function App() {
     }
     if (navPhase === 'enter') {
       if (!enterReady) {
-        commitStyles(bookElRef.current);
-        const f = requestAnimationFrame(() => setEnterReady(true));
-        return () => cancelAnimationFrame(f);
+        let cancelled = false, f = 0;
+        coverReady(bookElRef.current).then(() => {
+          if (cancelled) return;
+          commitStyles(bookElRef.current);
+          f = requestAnimationFrame(() => setEnterReady(true));
+        });
+        return () => { cancelled = true; cancelAnimationFrame(f); };
       }
       const t = setTimeout(() => {
         setNavPhase(null);
@@ -1026,7 +1045,7 @@ export default function App() {
             </div>
           )}
 
-          {navPhase !== 'exit' && (
+          {(navPhase !== 'exit' || !exitReady) && (
             <div
               ref={bookElRef}
               className="fixed top-0 left-0 z-50 pointer-events-auto"
