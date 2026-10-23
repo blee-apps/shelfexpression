@@ -411,6 +411,7 @@ export default function App() {
   const restShadowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // The open book's turn (pointer tilt, or the finger dragging it on a phone).
   const book3dRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const tiltRef = useRef<Tilt>(NO_TILT);
   const navDragRef = useRef(0); // how far a swipe had dragged the cover when it let go
   const applyTilt = (t: Tilt, transition: string) => {
@@ -514,6 +515,10 @@ export default function App() {
   const handleClose = useCallback(() => {
     // Ignore while opening, closing or sliding to another book.
     if (!selectedBook || animState !== 'open' || navPhase) return;
+    // Make sure the shelf is exactly where it was when the book opened.
+    const sc = scrollerRef.current;
+    if (sc && pinnedScrollRef.current != null && sc.scrollTop !== pinnedScrollRef.current) sc.scrollTop = pinnedScrollRef.current;
+    pinnedScrollRef.current = null;
     pendingNavRef.current = null;
     setHover(selectedBook.id, false, undefined, true);
     // Measure the shelf again, so the cover flies back to where the book is now.
@@ -687,6 +692,22 @@ export default function App() {
   const handleCloseRef = useRef(handleClose);
   handleCloseRef.current = handleClose;
 
+  // While a book is open the shelf behind stays put. iOS can still scroll it
+  // with a swipe (overflow: hidden doesn't stop touch scrolling there), so any
+  // drift is undone at once; it's free to scroll again once the book flies back.
+  const pinnedScrollRef = useRef<number | null>(null);
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    if (!sc || !selectedBook || animState === 'closing') return;
+    if (pinnedScrollRef.current == null) pinnedScrollRef.current = sc.scrollTop;
+    const pin = () => {
+      if (pinnedScrollRef.current != null && sc.scrollTop !== pinnedScrollRef.current) sc.scrollTop = pinnedScrollRef.current;
+    };
+    sc.addEventListener('scroll', pin, { passive: true });
+    return () => sc.removeEventListener('scroll', pin);
+  }, [selectedBook, animState]);
+  useEffect(() => { if (!selectedBook) pinnedScrollRef.current = null; }, [selectedBook]);
+
   // Phone: the cover follows your finger sideways (turning a little as it goes),
   // then carries on to the next book or springs back. Swipe down closes.
   useEffect(() => {
@@ -700,6 +721,8 @@ export default function App() {
       dx = dy = 0; lock = null;
     };
     const onMove = (e: TouchEvent) => {
+      // The cover's gestures are ours; never let them scroll the page.
+      if (e.cancelable) e.preventDefault();
       dx = e.touches[0].clientX - sx; dy = e.touches[0].clientY - sy;
       if (!lock && Math.hypot(dx, dy) > 8) lock = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
       if (lock !== 'x') return;
@@ -724,7 +747,7 @@ export default function App() {
       lock = null;
     };
     el.addEventListener('touchstart', onStart, { passive: true });
-    el.addEventListener('touchmove', onMove, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
     el.addEventListener('touchend', onEnd, { passive: true });
     el.addEventListener('touchcancel', onEnd, { passive: true });
     return () => {
@@ -873,6 +896,7 @@ export default function App() {
 
   return (
     <div
+      ref={scrollerRef}
       className={`${dark ? 'dark ' : ''}h-screen w-screen bg-[#FDFDFD] dark:bg-[#121212] text-gray-900 dark:text-neutral-100 overflow-x-hidden ${selectedBook ? 'overflow-y-hidden' : 'overflow-y-auto'} font-sans relative selection:bg-gray-900 dark:selection:bg-neutral-100 selection:text-white dark:selection:text-neutral-900 flex flex-col`}
       style={{ scrollbarGutter: 'stable' }}
     >
@@ -1214,6 +1238,7 @@ export default function App() {
               className="fixed top-0 left-0 z-50 pointer-events-auto"
               style={{
                 perspective: '1600px',
+                touchAction: 'none',
                 // While the sliding copy gets ready, hold the old cover exactly where
                 // it is (originRect already points at the next book, so the normal
                 // style would start resizing it in place).
@@ -1235,7 +1260,7 @@ export default function App() {
           )}
 
           <div
-            className={`absolute right-0 bottom-0 w-full md:w-[55%] h-[52%] md:h-full flex flex-col justify-start md:justify-center p-8 md:p-16 z-40 bg-gradient-to-t from-[#FDFDFD] dark:from-[#121212] via-[#FDFDFD] dark:via-[#121212] to-transparent md:to-[#FDFDFD]/90 dark:md:to-[#121212]/90 md:bg-[#FDFDFD] dark:md:bg-[#121212] pointer-events-auto overflow-y-auto
+            className={`absolute right-0 bottom-0 w-full md:w-[55%] h-[52%] md:h-full flex flex-col justify-start md:justify-center p-8 md:p-16 z-40 bg-gradient-to-t from-[#FDFDFD] dark:from-[#121212] via-[#FDFDFD] dark:via-[#121212] to-transparent md:to-[#FDFDFD]/90 dark:md:to-[#121212]/90 md:bg-[#FDFDFD] dark:md:bg-[#121212] pointer-events-auto overflow-y-auto overscroll-contain
               ${animState === 'open' ? 'opacity-100 translate-x-0 md:translate-y-0 translate-y-0' : 'opacity-0 translate-y-12 md:translate-y-0 md:translate-x-8'}`}
             style={{
               top: isMobile ? 'auto' : '0',
