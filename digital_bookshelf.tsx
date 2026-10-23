@@ -272,93 +272,43 @@ const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>, animState
 };
 
 const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLDivElement | null>; animState: string }) => {
-  const { rows, gridOffsetTop, gridHeight } = useShelfRows(gridRef, animState);
+  const { rows, gridOffsetTop } = useShelfRows(gridRef, animState);
 
   if (rows.length === 0) return null;
 
-  // The shelf-wall is absolutely positioned within the same relative parent as the grid.
-  // We align it precisely to the grid's position (gridOffsetTop) with extra padding around it.
-  const PAD = 16; // extra breathing room on each side
-
-  const uprightPositions = [
-    { left: 0 },
-    { right: 0 },
-  ];
+  // The wall sits behind the grid, a little wider than it. Aluminium tracks
+  // run up each side (and down the middle on wider screens, making two bays),
+  // and a thin steel shelf hangs in front of them under every row of books.
+  const PAD = 24;
 
   return (
     <div
       className="shelf-wall"
-      style={{
-        position: 'absolute',
-        top: gridOffsetTop - PAD,
-        left: -PAD,
-        right: -PAD,
-        bottom: 0,
-        pointerEvents: 'none',
-        zIndex: 0,
-        overflow: 'clip',
-      }}
+      style={{ top: gridOffsetTop - PAD, left: -PAD, right: -PAD }}
       aria-hidden="true"
     >
-      {/* Vertical uprights */}
-      {uprightPositions.map((pos, i) => (
-        <div
-          key={`upright-${i}`}
-          className="shelf-upright"
-          style={{ ...pos }}
-        />
-      ))}
+      <div className="shelf-track" style={{ left: 10 }} />
+      <div className="shelf-track shelf-track-mid" />
+      <div className="shelf-track" style={{ right: 10 }} />
 
-      {/* One shelf board + brackets per row */}
-      {rows.map((row, i) => {
-        // row.bottom is in grid coordinates; +PAD converts to shelf-wall coordinate space.
-        // No extra gap — books sit directly on the board surface.
-        const boardTop = row.bottom + PAD;
-        return (
-          <div key={`shelf-${i}`}>
-            {/* Soft shadow cast by books down onto the shelf surface */}
+      {rows.map((row, i) => (
+        // row.bottom is in grid coordinates; +PAD converts to wall coordinates.
+        // The shelf's top edge tucks 2px behind the books so they sit on it.
+        // A 606 shelf's front lip is about a tenth the height of a book. Above
+        // the lip we see a strip of the shelf's top surface; the books stand
+        // on its front half, so the back half shows behind them.
+        (() => {
+          const lip = Math.round(Math.min(34, Math.max(16, (row.bottom - row.top) * 0.08)));
+          const surface = Math.round(lip * 0.4);
+          return (
             <div
-              style={{
-                position: 'absolute',
-                left: PAD,
-                right: PAD,
-                top: boardTop - 12,
-                height: 12,
-                background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.09))',
-                zIndex: 3,
-                pointerEvents: 'none',
-              }}
+              key={`shelf-${i}`}
+              className="shelf"
+              style={{ top: row.bottom + PAD - Math.round(surface * 0.55), height: lip + surface, '--surface': `${surface}px` } as React.CSSProperties}
             />
-            {/* Shelf board — spans full upright-to-upright width */}
-            <div
-              className="shelf-board"
-              style={{ top: boardTop, left: 4, right: 4 }}
-            />
-            {/* Left bracket */}
-            <div
-              className="shelf-bracket"
-              style={{
-                position: 'absolute',
-                top: boardTop,
-                left: 16,
-                width: 12,
-                height: 24,
-              }}
-            />
-            {/* Right bracket */}
-            <div
-              className="shelf-bracket"
-              style={{
-                position: 'absolute',
-                top: boardTop,
-                right: 16,
-                width: 12,
-                height: 24,
-              }}
-            />
-          </div>
-        );
-      })}
+          );
+        })()
+      ))}
     </div>
   );
 };
@@ -381,6 +331,8 @@ export default function App() {
   const [animState, setAnimState] = useState<'idle' | 'opening' | 'open' | 'closing'>('idle');
   const [showAdmin, setShowAdmin] = useState(false);
   const [closingFade, setClosingFade] = useState(false);
+  // Minimal layout: the cover under the mouse or trackpad grows gently.
+  const [grownId, setGrownId] = useState<string | null>(null);
   const [navBook, setNavBook] = useState<Book | null>(null);
   const [navPhase, setNavPhase] = useState<'exit' | 'enter' | null>(null);
   const [navDir, setNavDir] = useState<'next' | 'prev'>('next');
@@ -756,6 +708,8 @@ export default function App() {
         }
         .book-hover-vitsoe {
           will-change: transform;
+          /* A tight contact shadow where the book meets the shelf, and a soft one on the wall behind */
+          filter: drop-shadow(0 1px 1px rgba(0,0,0,0.18)) drop-shadow(3px -2px 10px rgba(0,0,0,0.10));
         }
 
         /* Text in the book view eases in when you move to another book */
@@ -773,159 +727,64 @@ export default function App() {
           animation: fadeIn 220ms ease-out 260ms backwards;
         }
 
-        /* Wall background: warm linen with subtle vignette */
+        /* Wall: a plain, faintly warm plaster colour, square at the edges */
         .shelf-wall {
-          background-color: #F5F0EB;
-          background-image:
-            radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.45) 0%, transparent 70%),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
-          border-radius: 4px;
-          position: relative;
-        }
-
-        /* Vertical aluminum upright (the track/standard) */
-        .shelf-upright {
-          position: absolute;
-          top: -20px;
-          bottom: -20px;
-          width: 14px;
-          z-index: 1;
-          border-radius: 3px;
-          background:
-            linear-gradient(to right,
-              #c8c8c8 0%,
-              #e8e8e8 20%,
-              #f2f2f2 38%,
-              #ffffff 48%,
-              #f0f0f0 58%,
-              #d8d8d8 80%,
-              #bcbcbc 100%
-            );
-          box-shadow:
-            inset 1px 0 0 rgba(255,255,255,0.6),
-            inset -1px 0 0 rgba(0,0,0,0.12),
-            1px 0 4px rgba(0,0,0,0.08),
-            -1px 0 2px rgba(0,0,0,0.04);
-        }
-
-        /* Slot holes punched along the upright */
-        .shelf-upright::before {
-          content: '';
-          position: absolute;
-          top: 28px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 4px;
-          bottom: 28px;
-          background:
-            repeating-linear-gradient(
-              to bottom,
-              transparent 0px,
-              transparent 7px,
-              rgba(0,0,0,0.22) 7px,
-              rgba(0,0,0,0.22) 13px
-            );
-          border-radius: 2px;
-        }
-
-        /* Horizontal shelf board */
-        .shelf-board {
-          position: absolute;
-          left: 0;
-          right: 0;
-          height: 18px;
-          z-index: 2;
-          border-radius: 2px 2px 3px 3px;
-          /* Warm birch/beech wood grain */
-          background:
-            repeating-linear-gradient(
-              88deg,
-              transparent 0px,
-              rgba(160,120,60,0.04) 1px,
-              transparent 2px,
-              transparent 18px,
-              rgba(140,100,50,0.03) 19px,
-              transparent 20px
-            ),
-            repeating-linear-gradient(
-              92deg,
-              transparent 0px,
-              rgba(180,140,80,0.03) 3px,
-              transparent 4px,
-              transparent 26px
-            ),
-            linear-gradient(to bottom,
-              #e8dcc8 0%,
-              #ddd0b4 18%,
-              #d4c8a4 40%,
-              #cfc2a0 55%,
-              #d8ccaa 72%,
-              #c8bc94 88%,
-              #b8ac84 100%
-            );
-          /* Top highlight (light hitting the top surface) */
-          box-shadow:
-            0 -1px 0 rgba(255,255,255,0.9),
-            0 1px 0 rgba(0,0,0,0.06),
-            0 3px 8px rgba(0,0,0,0.13),
-            0 6px 16px rgba(0,0,0,0.07),
-            inset 0 1px 0 rgba(255,255,255,0.55),
-            inset 0 -1px 0 rgba(0,0,0,0.08);
-        }
-
-        /* Shelf board front lip / edge-banding (darker front face) */
-        .shelf-board::after {
-          content: '';
-          position: absolute;
-          left: 0; right: 0;
-          bottom: -5px;
-          height: 5px;
-          background: linear-gradient(to bottom, #b0a07c, #9a8c68);
-          border-radius: 0 0 2px 2px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-        }
-
-        /* Shadow cast by books/shelf onto the wall behind */
-        .shelf-board::before {
-          content: '';
-          position: absolute;
-          left: -4px; right: -4px;
-          top: -24px;
-          height: 24px;
-          background: linear-gradient(to bottom,
-            transparent 0%,
-            rgba(0,0,0,0.025) 60%,
-            rgba(0,0,0,0.065) 100%
-          );
-          pointer-events: none;
-        }
-
-        /* Bracket (L-shaped support under each shelf) */
-        .shelf-bracket {
           position: absolute;
           bottom: 0;
-          width: 12px;
-          height: 28px;
-          z-index: 3;
-          background: linear-gradient(to right, #d0d0d0, #e8e8e8 40%, #f0f0f0 55%, #d4d4d4);
-          border-radius: 0 0 2px 2px;
-          box-shadow:
-            inset 1px 0 0 rgba(255,255,255,0.5),
-            1px 0 3px rgba(0,0,0,0.1);
+          pointer-events: none;
+          z-index: 0;
+          background: #F4F2EE;
         }
 
-        /* Book bottom shadows on shelf */
-        .shelf-book-shadow {
+        /* E-Track: a slim satin aluminium upright with a column of slots */
+        .shelf-track {
           position: absolute;
-          left: 0; right: 0;
-          height: 6px;
-          bottom: 18px; /* sits on top of the shelf board */
+          top: 0;
+          bottom: 0;
+          width: 10px;
+          background: linear-gradient(to right, #c3c5c8 0, #dcdee0 1px, #e6e7e9 50%, #d6d8db calc(100% - 1px), #b9bbbe 100%);
+          box-shadow: 2px 0 3px rgba(0,0,0,0.05);
+        }
+        .shelf-track::before {
+          content: '';
+          position: absolute;
+          top: 12px;
+          bottom: 12px;
+          left: 4px;
+          width: 2px;
+          border-radius: 1px;
+          background: repeating-linear-gradient(to bottom, rgba(40,42,46,0.32) 0 7px, transparent 7px 16px);
+        }
+        .shelf-track-mid { left: calc(50% - 5px); display: none; }
+        @media (min-width: 768px) { .shelf-track-mid { display: block; } }
+
+        /* Shelf: thin powder-coated steel. A sliver of top surface, a
+           crisp front lip, then a soft shadow on the wall underneath. */
+        .shelf {
+          position: absolute;
+          left: 4px;
+          right: 4px;
+          z-index: 2;
+          /* top surface (lit from above, a touch darker toward the wall),
+             a bright folded edge, then the front face shading down */
           background: linear-gradient(to bottom,
-            rgba(0,0,0,0.0) 0%,
-            rgba(0,0,0,0.08) 100%
-          );
-          z-index: 3;
-          pointer-events: none;
+            #e9e7e2 0, #f6f5f1 var(--surface),
+            #fcfbf9 var(--surface), #ebe9e4 calc(var(--surface) + 2px), #e6e4de 55%, #dbd9d2 calc(100% - 2px), #c6c4bd 100%);
+          box-shadow:
+            0 1px 1px rgba(0,0,0,0.10),
+            0 12px 16px -6px rgba(0,0,0,0.22),
+            0 28px 36px -14px rgba(0,0,0,0.14);
+        }
+        /* Seam where the two bays' shelves meet at the middle track */
+        @media (min-width: 768px) {
+          .shelf::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            left: calc(50% - 4px);
+            width: 1px;
+            background: rgba(0,0,0,0.10);
+          }
         }
       `}</style>
 
@@ -1058,7 +917,7 @@ export default function App() {
                   />
                   <div
                     ref={el => { shelfRefs.current[book.id] = el; }}
-                    className={`relative overflow-hidden rounded-xs pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.25)] book-hover-vitsoe`}
+                    className={`relative overflow-hidden rounded-xs pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom book-hover-vitsoe`}
                     style={{
                       transition: closingFade || isHidden
                         ? 'opacity 0s'
@@ -1075,8 +934,11 @@ export default function App() {
                   ref={el => { shelfRefs.current[book.id] = el; bookButtonRefs.current[book.id] = el; }}
                   aria-label={`${book.title} by ${book.author}`}
                   onClick={(e) => handleSelect(book, e)}
-                  className={`block w-full p-0 bg-transparent border-0 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 relative overflow-hidden rounded-xs cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)] hover:scale-[1.03] hover:drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)] transition-all duration-300 ease-out`}
-                  style={{ transition: closingFade ? 'opacity 0s' : 'all 0.3s ease-out' } as React.CSSProperties}
+                  className={`block w-full p-0 bg-transparent border-0 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 relative overflow-hidden rounded-xs cursor-pointer ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom ${grownId === book.id && animState === 'idle' ? 'scale-[1.03] drop-shadow-[0_10px_24px_rgba(0,0,0,0.22)]' : 'drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]'}`}
+                  // Pointer events rather than CSS :hover, so it also works with an iPad trackpad.
+                  onPointerEnter={(e) => { if (e.pointerType !== 'touch') setGrownId(book.id); }}
+                  onPointerLeave={() => setGrownId(id => (id === book.id ? null : id))}
+                  style={{ transition: closingFade ? 'opacity 0s' : `scale ${MOTION.hoverMs}ms ${MOTION.hover}, filter ${MOTION.hoverMs}ms ${MOTION.hover}, opacity 0.3s ease-out` } as React.CSSProperties}
                 >
                   <DynamicCover book={book} />
                 </button>

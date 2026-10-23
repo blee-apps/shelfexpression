@@ -43,8 +43,8 @@ Locally (`npm run dev`), there's no key or Publish. Covers save straight into `c
 
 To switch between the two shelf styles, tick **Enable Vitsoe Bookshelf** under the editor's Advanced section, or set `useVitsoeShelf` in `content/books.json`:
 
-- `true`: a Vitsoe 606 shelf with birch boards and aluminum rails. Hovering a book lifts and tilts it, as if you're picking it off the shelf.
-- `false`: a clean, minimal gallery with covers floating on a flat background.
+- `true`: a Vitsoe 606 shelf with slim aluminum tracks and off-white steel shelves. Hovering a book lifts and tilts it, as if you're picking it off the shelf.
+- `false`: a clean, minimal gallery with covers on a flat background. Hovering a cover makes it grow slightly.
 
 ### 5. Share your favorites
 
@@ -52,7 +52,7 @@ Tap **Make a share image** in the editor, or **Share** on a book. Pick up to 12 
 
 - **Sizes:** Story (9:16), Post (4:5) and Square.
 - **Layouts:** Grid, with optional titles, or Shelf. A single book gets Feature, aligned left or centered, with an optional synopsis.
-- **Backgrounds:** Paper, White, Dark, or a color taken from the first cover.
+- **Backgrounds:** Paper, White, Dark, or a color taken from a cover. Use the arrows beside the Cover swatch to choose which book.
 - **Text:** an optional heading, and a footer line such as your website. The footer is remembered, and saved with your books when you publish.
 
 On an iPhone, **Share** opens the share sheet, so you can save the image to Photos or post it straight to Instagram. Elsewhere, it downloads.

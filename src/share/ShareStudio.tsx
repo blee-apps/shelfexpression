@@ -29,6 +29,8 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const blobRef = useRef<Blob | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  // Which book the Cover background takes its color from (the first, unless picked).
+  const [tintId, setTintId] = useState<string | null>(null);
 
   const set = <K extends keyof ShareOptions>(k: K, v: ShareOptions[K]) =>
     setOpts(prev => {
@@ -63,15 +65,23 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   const single = order.length === 1;
   const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' ? 'grid' : opts.layout;
 
+  const tintIndex = Math.max(0, order.findIndex(b => b.id === tintId));
+  const tintBook = order[tintIndex];
+  const tintImg = tintBook ? imgs.get(tintBook.id) ?? null : null;
+  const stepTint = (d: number) => {
+    if (!order.length) return;
+    setTintId(order[(tintIndex + d + order.length) % order.length].id);
+  };
+
   // Redraw whenever anything changes.
   useEffect(() => {
     if (busy || !fontsReady || !canvasRef.current) return;
-    const tint = opts.bg === 'cover' ? coverColor(shareBooks[0]?.img ?? null) : null;
+    const tint = opts.bg === 'cover' ? coverColor(tintImg) : null;
     renderShare(canvasRef.current, shareBooks, { ...opts, layout, footer }, tint);
     blobRef.current = null;
     canvasRef.current.toBlob(b => { blobRef.current = b; }, 'image/jpeg', 0.92);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, fontsReady, order, opts, footer, imgs]);
+  }, [busy, fontsReady, order, opts, footer, imgs, tintImg]);
 
   const getBlob = async () => blobRef.current
     || await new Promise<Blob | null>(r => canvasRef.current ? canvasRef.current.toBlob(r, 'image/jpeg', 0.92) : r(null));
@@ -196,13 +206,23 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
           )}
 
           <Section label="Background">
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               {([['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark'], ['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Cover']] as [ShareBg, string, string][]).map(([v, color, label]) => (
                 <button key={v} onClick={() => set('bg', v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
                   <div style={{ width: 44, height: 44, borderRadius: 22, background: color, border: '1px solid #ddd', outline: opts.bg === v ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
                   <div style={{ fontSize: 11, color: opts.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
                 </button>
               ))}
+              {opts.bg === 'cover' && order.length > 1 && (
+                // Pages through the chosen books to pick which cover sets the color.
+                <div className="share-tint-picker" style={{ display: 'flex', alignItems: 'center', height: 44, marginLeft: 4 }}>
+                  <TintArrow dir={-1} onClick={() => stepTint(-1)} />
+                  <div title={tintBook?.title} style={{ width: 30, height: 44, borderRadius: 3, overflow: 'hidden', background: '#e5e5e5', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}>
+                    {tintImg && <img src={tintImg.src} alt={tintBook ? `Color from ${tintBook.title}` : ''} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                  </div>
+                  <TintArrow dir={1} onClick={() => stepTint(1)} />
+                </div>
+              )}
             </div>
           </Section>
 
@@ -257,6 +277,17 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
       </div>
       {children}
     </div>
+  );
+}
+
+function TintArrow({ dir, onClick }: { dir: 1 | -1; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={dir < 0 ? 'Previous cover' : 'Next cover'}
+      style={{ width: 32, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#555' }}>
+      <svg width="9" height="14" viewBox="0 0 9 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d={dir < 0 ? 'M7 1 1 7l6 6' : 'M2 1l6 6-6 6'} />
+      </svg>
+    </button>
   );
 }
 
