@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Book, BOOKS, USE_VITSOE_SHELF, COLOR_MODE } from './src/books';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
@@ -15,11 +15,11 @@ const hashString = (str: string) => {
 
 const getColorForString = (str: string) => `hsl(${hashString(str) % 360}, 40%, 26%)`;
 
-// Each book always tilts the same way when hovered (between -7° and 7°, never flat),
+// Each book always tilts the same way when hovered (between -4° and 4°, never flat),
 // so moving the mouse off and back on doesn't make it wobble to a new angle.
 export const getTiltAngle = (book: Book) => {
   const h = hashString(book.title + book.id);
-  const mag = 3 + (h % 5);           // 3..7 degrees
+  const mag = 2 + (h % 5) * 0.5;     // 2..4 degrees
   return h % 2 === 0 ? mag : -mag;
 };
 
@@ -205,6 +205,27 @@ const DynamicCover = ({ book, eager = false }: { book: Book; eager?: boolean }) 
   );
 };
 
+// The open cover: a flat card that tilts a little in 3D as it moves (toward the
+// pointer, with a finger, and on the way open or closed). No fake spine or
+// page edges; a thin one made every book look like a magazine.
+type Tilt = { dx: number; ry: number; rx: number };
+const NO_TILT: Tilt = { dx: 0, ry: 0, rx: 0 };
+const tiltCss = (t: Tilt) => `translateX(${t.dx.toFixed(2)}px) rotateY(${t.ry.toFixed(2)}deg) rotateX(${t.rx.toFixed(2)}deg)`;
+
+const Book3D = ({ book, innerRef, tilt, noShadow, onShelf, shadowMs }: {
+  book: Book; width?: number; innerRef?: React.Ref<HTMLDivElement>; tilt: Tilt; noShadow?: boolean;
+  onShelf?: boolean; shadowMs?: number;
+}) => (
+  <div ref={innerRef} className="book3d absolute inset-0" style={{ transform: tiltCss(tilt) }}>
+    {/* While it flies from or back to the shelf, its shadow eases to or from the
+        shelf's own resting shadow, so there's nothing to swap when it lands. */}
+    <div className={`flyer-cover absolute inset-0 rounded-xs overflow-hidden ${onShelf ? (USE_VITSOE_SHELF ? 'on-shelf-vitsoe' : 'on-shelf-minimal') : ''}`}
+      style={noShadow ? { boxShadow: 'none' } : { transition: `box-shadow ${shadowMs ?? 0}ms ease-in-out` }}>
+      <DynamicCover book={book} eager />
+    </div>
+  </div>
+);
+
 // Tracks the window size so layouts switch between mobile and desktop on
 // resize or rotation, not just on first load.
 const useViewport = () => {
@@ -353,8 +374,18 @@ const poseTransform = (p: Pose) =>
 // change it, so the transition always plays instead of jumping to the end.
 const commitStyles = (el: Element | null) => { el?.getBoundingClientRect(); };
 
-const HOVER_LIFT = 0.2;    // lift by 20% of the cover height
-const HOVER_SCALE = 1.08;
+const HOVER_LIFT = 0.12;   // lift by 12% of the cover height
+const HOVER_SCALE = 1.04;
+const LANDING_PX = 4;      // a closing cover lands this far above its place, then settles
+
+// Vitsoe pick-up: the book leans out from the bottom corner on the side it
+// tilts (like a finger hooking the top edge), then lifts a moment later.
+// Putting it back, it drops, lands a hair low and settles, then straightens.
+const PICKUP = {
+  on: 'rotate 380ms cubic-bezier(0.3, 0, 0.2, 1), translate 460ms cubic-bezier(0.22, 1, 0.36, 1) 70ms, scale 460ms cubic-bezier(0.22, 1, 0.36, 1) 70ms',
+  off: 'translate 340ms cubic-bezier(0.55, 0, 0.35, 1.08), scale 320ms cubic-bezier(0.4, 0, 0.2, 1), rotate 300ms cubic-bezier(0.4, 0, 0.2, 1) 90ms',
+};
+const pivotFor = (book: Book) => (getTiltAngle(book) > 0 ? 'right bottom' : 'left bottom');
 
 export default function App() {
   const dark = useDarkMode();
@@ -377,6 +408,18 @@ export default function App() {
   const targetScale = isMobile ? 1.45 : 1.65;
   const shelfRefs = useRef<Record<string, HTMLElement | null>>({});
   const shadowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const restShadowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // The open book's turn (pointer tilt, or the finger dragging it on a phone).
+  const book3dRef = useRef<HTMLDivElement | null>(null);
+  const tiltRef = useRef<Tilt>(NO_TILT);
+  const navDragRef = useRef(0); // how far a swipe had dragged the cover when it let go
+  const applyTilt = (t: Tilt, transition: string) => {
+    tiltRef.current = t;
+    const el = book3dRef.current;
+    if (!el) return;
+    el.style.transition = transition;
+    el.style.transform = tiltCss(t);
+  };
   const bookElRef = useRef<HTMLDivElement | null>(null);
   const navElRef = useRef<HTMLDivElement | null>(null);
   const navTargetRef = useRef<Book | null>(null);
@@ -404,20 +447,36 @@ export default function App() {
     ? { x: vp.w * 0.5, y: Math.min((h * targetScale) / 2 + 80, vp.h * 0.38) }
     : { x: vp.w * 0.28, y: vp.h * 0.5 };
 
-  const setHover = (id: string, on: boolean, book?: Book) => {
+  const setHover = (id: string, on: boolean, book?: Book, instant = false) => {
     const el = shelfRefs.current[id];
     const shadow = shadowRefs.current[id];
-    const transform = on && book
-      ? `translateY(-${HOVER_LIFT * 100}%) rotate(${getTiltAngle(book)}deg) scale(${HOVER_SCALE})`
-      : '';
+    const rest = restShadowRefs.current[id];
+    const lift = on && !!book;
+    const tilt = book ? getTiltAngle(book) : 0;
     if (el) {
-      el.style.zIndex = on ? '99' : '';
-      el.style.transform = transform;
+      el.style.transition = instant ? 'none' : `${lift ? PICKUP.on : PICKUP.off}, opacity 0.3s ease-out`;
+      el.style.zIndex = lift ? '99' : '';
+      el.style.translate = lift ? `0 -${HOVER_LIFT * 100}%` : '';
+      el.style.rotate = lift ? `${tilt}deg` : '';
+      el.style.scale = lift ? `${HOVER_SCALE}` : '';
     }
+    // The lifted shadow stays on the wall: it follows only part of the way,
+    // so it spreads and fades as the book comes toward you.
     if (shadow) {
-      shadow.style.zIndex = on ? '98' : '';
-      shadow.style.transform = transform;
-      shadow.style.opacity = on ? '1' : '0';
+      shadow.style.transition = instant ? 'none' : lift
+        ? `${PICKUP.on}, opacity 380ms ease-out 60ms`
+        : `${PICKUP.off}, opacity 260ms ease-in`;
+      shadow.style.zIndex = lift ? '98' : '';
+      shadow.style.translate = lift ? `0 -${HOVER_LIFT * 35}%` : '';
+      shadow.style.rotate = lift ? `${tilt * 0.6}deg` : '';
+      shadow.style.scale = lift ? '1.03' : '';
+      shadow.style.opacity = lift ? '1' : '0';
+    }
+    // The resting shadow on the shelf and wall goes as the book leaves, and
+    // comes back as it lands.
+    if (rest) {
+      rest.style.transition = instant ? 'none' : lift ? 'opacity 200ms ease-out' : 'opacity 220ms ease-out 200ms';
+      rest.style.opacity = instant ? '' : lift ? '0' : '1';
     }
   };
 
@@ -428,21 +487,25 @@ export default function App() {
     const cy = rect.top + rect.height / 2;
     // Start the flight from exactly where the cover is now, including the
     // hover lift and tilt, so it doesn't drop and straighten first.
-    const lifted = !!shelfRefs.current[book.id]?.style.transform;
+    const lifted = !!shelfRefs.current[book.id]?.style.translate;
     if (lifted) {
+      // Centre of the lifted cover: scale and turn about the bottom corner it
+      // pivots on, then lift.
       const h = rect.height;
-      const rad = (getTiltAngle(book) * Math.PI) / 180;
-      const arm = (h / 2) * HOVER_SCALE; // bottom edge → centre, after scaling
+      const tilt = getTiltAngle(book);
+      const rad = (tilt * Math.PI) / 180;
+      const ox = tilt > 0 ? rect.right : rect.left;
+      const vx = (cx - ox) * HOVER_SCALE, vy = (-h / 2) * HOVER_SCALE;
       startPoseRef.current = {
-        x: cx + arm * Math.sin(rad),
-        y: cy + h / 2 - HOVER_LIFT * h - arm * Math.cos(rad),
-        rot: getTiltAngle(book),
+        x: ox + vx * Math.cos(rad) - vy * Math.sin(rad),
+        y: rect.bottom + vx * Math.sin(rad) + vy * Math.cos(rad) - HOVER_LIFT * h,
+        rot: tilt,
         scale: HOVER_SCALE,
       };
     } else {
       startPoseRef.current = { x: cx, y: cy, rot: 0, scale: 1 };
     }
-    setHover(book.id, false); // the shelf copy is hidden while the book is open
+    setHover(book.id, false, undefined, true); // the shelf copy is hidden while the book is open
     setOriginRect(rect);
     setSelectedBook(book);
     setAnimState('opening');
@@ -452,7 +515,7 @@ export default function App() {
     // Ignore while opening, closing or sliding to another book.
     if (!selectedBook || animState !== 'open' || navPhase) return;
     pendingNavRef.current = null;
-    setHover(selectedBook.id, false);
+    setHover(selectedBook.id, false, undefined, true);
     // Measure the shelf again, so the cover flies back to where the book is now.
     const rect = getShelfRect(selectedBook.id);
     if (rect) setOriginRect(rect);
@@ -461,6 +524,14 @@ export default function App() {
   }, [selectedBook, animState, navPhase]);
 
   const finishClose = useCallback(() => {
+    // The cover arrives a few pixels above its place; the shelf copy takes over
+    // there and settles down onto the shelf.
+    const id = returnFocusIdRef.current;
+    if (id) {
+      shelfRefs.current[id]?.animate?.(
+        [{ translate: `0 -${LANDING_PX}px` }, { translate: '0 1px', offset: 0.6 }, { translate: '0 0' }],
+        { duration: 300, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' });
+    }
     // Swap the flying cover for the real one on the shelf in the same frame.
     setClosingFade(true);
     setSelectedBook(null);
@@ -616,34 +687,107 @@ export default function App() {
   const handleCloseRef = useRef(handleClose);
   handleCloseRef.current = handleClose;
 
+  // Phone: the cover follows your finger sideways (turning a little as it goes),
+  // then carries on to the next book or springs back. Swipe down closes.
   useEffect(() => {
     const el = bookElRef.current;
-    if (!el || animState !== 'open') return;
-
-    let startX = 0, startY = 0;
+    if (!el || animState !== 'open' || navPhase || !selectedBook) return;
+    const idx = BOOKS.findIndex(b => b.id === selectedBook.id);
+    let sx = 0, sy = 0, st = 0, dx = 0, dy = 0;
+    let lock: 'x' | 'y' | null = null;
     const onStart = (e: TouchEvent) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = performance.now();
+      dx = dy = 0; lock = null;
     };
-    const onEnd = (e: TouchEvent) => {
-      const dx = e.changedTouches[0].clientX - startX;
-      const dy = e.changedTouches[0].clientY - startY;
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
-
-      if (absDx > absDy && absDx > 50) {
-        navigateBooksRef.current(dx > 0 ? 'prev' : 'next');
-      } else if (dy > 80 && absDy > absDx) {
+    const onMove = (e: TouchEvent) => {
+      dx = e.touches[0].clientX - sx; dy = e.touches[0].clientY - sy;
+      if (!lock && Math.hypot(dx, dy) > 8) lock = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (lock !== 'x') return;
+      // At the first or last book it only gives a little.
+      const end = (dx > 0 && idx === 0) || (dx < 0 && idx === BOOKS.length - 1);
+      const d = end ? dx * 0.25 : dx;
+      applyTilt({ dx: d / targetScale, ry: Math.max(-10, Math.min(10, d * 0.035)), rx: 0 }, 'none');
+    };
+    const onEnd = () => {
+      const v = Math.abs(dx) / Math.max(1, performance.now() - st);
+      if (lock === 'x') {
+        const end = (dx > 0 && idx === 0) || (dx < 0 && idx === BOOKS.length - 1);
+        if (!end && (Math.abs(dx) > 60 || (v > 0.45 && Math.abs(dx) > 20))) {
+          navDragRef.current = dx;
+          navigateBooksRef.current(dx > 0 ? 'prev' : 'next');
+        } else {
+          applyTilt(NO_TILT, 'transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1)');
+        }
+      } else if (lock === 'y' && dy > 80) {
         handleCloseRef.current();
       }
+      lock = null;
     };
     el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: true });
     el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
     return () => {
       el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
     };
-  }, [animState, navPhase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animState, navPhase, selectedBook, targetScale]);
+
+  // Mouse or trackpad: the open book turns gently toward the pointer, showing
+  // a sliver of its spine or page edges.
+  useEffect(() => {
+    if (animState !== 'open' || navPhase) return;
+    const ease = 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1)';
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      const r = bookElRef.current?.getBoundingClientRect();
+      if (!r) return;
+      // -1..1 from the book's centre to the window's edge on that side.
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ox = e.clientX - cx, oy = e.clientY - cy;
+      const nx = Math.max(-1, Math.min(1, ox / Math.max(1, ox > 0 ? vp.w - cx : cx)));
+      const ny = Math.max(-1, Math.min(1, oy / Math.max(1, oy > 0 ? vp.h - cy : cy)));
+      applyTilt({ dx: 0, ry: nx * 8, rx: -ny * 4 }, ease);
+    };
+    const onLeave = (e: PointerEvent) => { if (!e.relatedTarget) applyTilt(NO_TILT, ease); };
+    window.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerout', onLeave);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerout', onLeave);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animState, navPhase, vp.w, vp.h]);
+
+  // Flying open or back to the shelf, the book turns a little on the way, so
+  // you catch its spine for a moment.
+  const prevAnimRef = useRef(animState);
+  useEffect(() => {
+    const prev = prevAnimRef.current;
+    prevAnimRef.current = animState;
+    const el = book3dRef.current;
+    if (!el?.animate) return;
+    if (animState === 'open' && prev === 'opening') {
+      el.animate([{ transform: tiltCss(NO_TILT) }, { transform: 'rotateY(10deg)', offset: 0.45 }, { transform: tiltCss(NO_TILT) }],
+        { duration: MOTION.openMs, easing: 'ease-in-out' });
+    } else if (animState === 'closing') {
+      applyTilt(NO_TILT, 'none');
+      el.animate([{ transform: tiltCss(NO_TILT) }, { transform: 'rotateY(7deg)', offset: 0.5 }, { transform: tiltCss(NO_TILT) }],
+        { duration: MOTION.closeMs, easing: 'ease-in-out' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animState]);
+
+  // Paging: the copy that slides out keeps the book's turn; the drag offset
+  // moves to its position instead, in the same frame.
+  useLayoutEffect(() => {
+    if (navPhase === 'exit') applyTilt({ ...tiltRef.current, dx: 0 }, 'none');
+    if (navPhase === 'enter') { tiltRef.current = NO_TILT; navDragRef.current = 0; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navPhase]);
 
   useEffect(() => {
     return () => {
@@ -663,14 +807,15 @@ export default function App() {
     let pose: Pose;
     if (animState === 'open') pose = { ...centerFor(originRect.height), rot: 0, scale: targetScale };
     else if (animState === 'opening') pose = startPoseRef.current ?? shelf;
-    else pose = shelf;
+    else pose = { ...shelf, y: shelf.y - LANDING_PX };
     return { width: originRect.width, height: originRect.height, transform: poseTransform(pose) };
   };
 
   const getExitInitStyle = (): React.CSSProperties => {
     const r = navExitRectRef.current;
     if (!r) return {};
-    return { width: r.width, height: r.height, transform: poseTransform({ ...centerFor(r.height), rot: 0, scale: targetScale }) };
+    const c = centerFor(r.height);
+    return { width: r.width, height: r.height, transform: poseTransform({ x: c.x + navDragRef.current, y: c.y, rot: 0, scale: targetScale }) };
   };
 
   const getExitStyle = (): React.CSSProperties => {
@@ -750,10 +895,27 @@ export default function App() {
           position: relative;
         }
         .book-hover-vitsoe {
-          will-change: transform;
-          /* A tight contact shadow where the book meets the shelf, and a soft one on the wall behind */
-          filter: drop-shadow(0 1px 1px rgba(0,0,0,0.18)) drop-shadow(3px -2px 10px rgba(0,0,0,0.10));
+          will-change: translate, rotate, scale;
         }
+        /* A tight contact shadow where the book meets the shelf, and a soft one on the wall behind */
+        .vitsoe-rest-shadow {
+          box-shadow: 0 1px 1px rgba(0,0,0,0.18), 3px -2px 10px rgba(0,0,0,0.10);
+        }
+        /* Lifted: wider, softer and fainter, because the book is now away from the wall */
+        /* (a blurred dark card rather than a box-shadow, so it has no hard inner edge) */
+        .vitsoe-lift-shadow {
+          inset: 10% 6% -3% 6% !important;
+          background: rgba(0,0,0,0.30);
+          filter: blur(18px);
+          will-change: translate, rotate, scale, opacity;
+        }
+
+        .book3d { will-change: transform; }
+        .flyer-cover { box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        /* The same shadows the books have standing on the shelf */
+        .flyer-cover.on-shelf-vitsoe { box-shadow: 0 1px 1px rgba(0,0,0,0.18), 3px -2px 10px rgba(0,0,0,0.10); }
+        .dark .flyer-cover.on-shelf-vitsoe { box-shadow: 0 1px 1px rgba(0,0,0,0.5), 3px -2px 10px rgba(0,0,0,0.35); }
+        .flyer-cover.on-shelf-minimal { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
 
         /* Text in the book view eases in when you move to another book */
         @keyframes bookTextIn {
@@ -836,8 +998,11 @@ export default function App() {
             0 12px 16px -6px rgba(0,0,0,0.55),
             0 28px 36px -14px rgba(0,0,0,0.45);
         }
-        .dark .book-hover-vitsoe {
-          filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)) drop-shadow(3px -2px 10px rgba(0,0,0,0.35));
+        .dark .vitsoe-rest-shadow {
+          box-shadow: 0 1px 1px rgba(0,0,0,0.5), 3px -2px 10px rgba(0,0,0,0.35);
+        }
+        .dark .vitsoe-lift-shadow {
+          background: rgba(0,0,0,0.65);
         }
 
         /* Seam where the two bays' shelves meet at the middle track */
@@ -969,26 +1134,25 @@ export default function App() {
                     }, 150);
                   }}
                 >
-                  {/* Hover shadow: always there, only its opacity changes (cheap to animate) */}
+                  {/* Resting shadows (contact on the shelf, soft on the wall). They stay put. */}
+                  <div
+                    ref={el => { restShadowRefs.current[book.id] = el; }}
+                    aria-hidden="true"
+                    className={`vitsoe-rest-shadow absolute inset-0 rounded-xs pointer-events-none ${isHidden ? 'opacity-0' : ''}`}
+                  />
+                  {/* Lifted shadow on the wall: always there, only its opacity changes (cheap to animate) */}
                   <div
                     ref={el => { shadowRefs.current[book.id] = el; }}
                     aria-hidden="true"
-                    className="absolute inset-0 rounded-xs pointer-events-none origin-bottom"
-                    style={{
-                      boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-                      opacity: 0,
-                      transition: closingFade || isHidden
-                        ? 'none'
-                        : `transform ${MOTION.hoverMs}ms ${MOTION.hover}, opacity ${MOTION.hoverMs}ms ease-out`,
-                    }}
+                    className="vitsoe-lift-shadow absolute inset-0 rounded-xs pointer-events-none"
+                    style={{ opacity: 0, transformOrigin: pivotFor(book) }}
                   />
                   <div
                     ref={el => { shelfRefs.current[book.id] = el; }}
-                    className={`relative overflow-hidden rounded-xs pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} origin-bottom book-hover-vitsoe`}
+                    className={`relative overflow-hidden rounded-xs pointer-events-none ${isHidden ? 'opacity-0' : 'opacity-100'} book-hover-vitsoe`}
                     style={{
-                      transition: closingFade || isHidden
-                        ? 'opacity 0s'
-                        : `transform ${MOTION.hoverMs}ms ${MOTION.hover}, opacity 0.3s ease-out`,
+                      transformOrigin: pivotFor(book),
+                      transition: closingFade || isHidden ? 'opacity 0s' : `${PICKUP.off}, opacity 0.3s ease-out`,
                     } as React.CSSProperties}
                   >
                     <DynamicCover book={book} />
@@ -1034,14 +1198,13 @@ export default function App() {
               ref={navElRef}
               className="fixed top-0 left-0 z-[70] pointer-events-none"
               style={{
+                perspective: '1600px',
                 ...(exitReady ? getExitStyle() : getExitInitStyle()),
                 opacity: exitReady ? 0 : 1,
                 transition: `transform ${MOTION.navMs}ms ${MOTION.exit}, opacity ${MOTION.navMs}ms ${MOTION.exit}`,
               } as React.CSSProperties}
             >
-              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xs overflow-hidden">
-                <DynamicCover book={navBook} eager />
-              </div>
+              <Book3D book={navBook} width={navExitRectRef.current?.width ?? 0} tilt={{ ...tiltRef.current, dx: 0 }} />
             </div>
           )}
 
@@ -1050,6 +1213,7 @@ export default function App() {
               ref={bookElRef}
               className="fixed top-0 left-0 z-50 pointer-events-auto"
               style={{
+                perspective: '1600px',
                 // While the sliding copy gets ready, hold the old cover exactly where
                 // it is (originRect already points at the next book, so the normal
                 // style would start resizing it in place).
@@ -1063,9 +1227,10 @@ export default function App() {
                 if (animState === 'closing' && e.target === e.currentTarget && e.propertyName === 'transform') finishClose();
               }}
             >
-              <div className="absolute inset-0 shadow-[0_20px_40px_rgba(0,0,0,0.3)] rounded-xs overflow-hidden" style={navPhase === 'exit' ? { boxShadow: 'none' } : undefined}>
-                <DynamicCover book={selectedBook} eager />
-              </div>
+              <Book3D book={selectedBook} width={(navPhase === 'exit' ? navExitRectRef.current : originRect)?.width ?? 0}
+                innerRef={book3dRef} tilt={tiltRef.current} noShadow={navPhase === 'exit'}
+                onShelf={animState === 'opening' || animState === 'closing'}
+                shadowMs={animState === 'closing' ? MOTION.closeMs : animState === 'open' && !navPhase ? MOTION.openMs : 0} />
             </div>
           )}
 

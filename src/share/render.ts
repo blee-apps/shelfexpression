@@ -127,7 +127,20 @@ const setFont = (ctx: CanvasRenderingContext2D, size: number, family: string, we
 
 // --- Drawing helpers --------------------------------------------------------
 
+// For the layout morph: while capturing, each cover's place (and how to draw
+// it) is recorded instead of drawn, so the rest of the image can be drawn
+// on its own and the covers moved on top.
+type CoverDraw = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => void;
+type Placed = { x: number; y: number; w: number; h: number; draw: CoverDraw };
+let capture: Map<HTMLImageElement, Placed> | null = null;
+const captured = (img: HTMLImageElement | null, x: number, y: number, w: number, h: number, draw: CoverDraw) => {
+  if (!capture || !img) return false;
+  capture.set(img, { x, y, w, h, draw });
+  return true;
+};
+
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, x: number, y: number, w: number, h: number, p: Palette, strength = 1) {
+  if (captured(img, x, y, w, h, (c, x2, y2, w2, h2) => drawCover(c, img, x2, y2, w2, h2, p, strength))) return;
   ctx.save();
   ctx.shadowColor = `rgba(0,0,0,${p.shadow * strength})`;
   ctx.shadowBlur = Math.max(10, w * 0.09);
@@ -334,18 +347,22 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
     let x = inner.x + (inner.w - row.w) / 2;
     for (const k of row.items) {
       const w = row.h * ratio(books[k]);
+      const img = books[k].img;
       // A tight contact shadow where it stands, and a soft one on the wall
       // behind (up and to the side, so the book doesn't float over the lip).
-      ctx.fillStyle = `rgba(0,0,0,${dark ? 0.5 : 0.22})`;
-      ctx.fillRect(x + 1, y + row.h - 1, w - 2, 3);
-      ctx.save();
-      ctx.shadowColor = `rgba(0,0,0,${dark ? 0.45 : 0.14})`;
-      ctx.shadowBlur = Math.max(12, w * 0.07);
-      ctx.shadowOffsetX = 5;
-      ctx.shadowOffsetY = -4;
-      if (books[k].img) ctx.drawImage(books[k].img!, x, y, w, row.h);
-      else { ctx.fillStyle = 'rgba(128,128,128,0.25)'; ctx.fillRect(x, y, w, row.h); }
-      ctx.restore();
+      const standing: CoverDraw = (c, bx, by, bw, bh) => {
+        c.fillStyle = `rgba(0,0,0,${dark ? 0.5 : 0.22})`;
+        c.fillRect(bx + 1, by + bh - 1, bw - 2, 3);
+        c.save();
+        c.shadowColor = `rgba(0,0,0,${dark ? 0.45 : 0.14})`;
+        c.shadowBlur = Math.max(12, bw * 0.07);
+        c.shadowOffsetX = 5;
+        c.shadowOffsetY = -4;
+        if (img) c.drawImage(img, bx, by, bw, bh);
+        else { c.fillStyle = 'rgba(128,128,128,0.25)'; c.fillRect(bx, by, bw, bh); }
+        c.restore();
+      };
+      if (!captured(img, x, y, w, row.h, standing)) standing(ctx, x, y, w, row.h);
       x += w + gap;
     }
     y += row.h + reserve;
@@ -411,4 +428,77 @@ function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOpt
   const cx = left ? box.x : box.x + (box.w - cw) / 2;
   drawCover(ctx, book.img, cx, y0, cw, coverH, p);
   drawText(t, left ? box.x : W / 2, y0 + coverH + 64, left ? 'left' : 'center');
+}
+
+
+// --- Layout morph -------------------------------------------------------------
+// Switching layout (or reordering, or turning titles on) glides each cover from
+// where it was to where it goes, while everything else crossfades.
+
+function layoutOnly(books: ShareBook[], o: ShareOptions, tint: [number, number, number] | null) {
+  const canvas = document.createElement('canvas');
+  capture = new Map();
+  try {
+    renderShare(canvas, books, o, tint);
+    return { canvas, placed: capture };
+  } finally {
+    capture = null;
+  }
+}
+
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+/** Animates the canvas from one set of options to another. Returns a cancel function. */
+export function morphShare(canvas: HTMLCanvasElement, fromBooks: ShareBook[], from: ShareOptions, books: ShareBook[], to: ShareOptions,
+  tint: [number, number, number] | null, ms = 480, done?: () => void): () => void {
+  const W2 = SIZES[to.size].w, H2 = SIZES[to.size].h;
+  const finish = () => { canvas.style.aspectRatio = `${W2} / ${H2}`; renderShare(canvas, books, to, tint); done?.(); };
+  if (typeof requestAnimationFrame === 'undefined') { finish(); return () => {}; }
+  const a = layoutOnly(fromBooks, from, tint);
+  const b = layoutOnly(books, to, tint);
+  const W1 = a.canvas.width, H1 = a.canvas.height;
+  const resizing = W1 !== W2 || H1 !== H2;
+  // Edges that open up while the frame changes size take the new background.
+  const px = b.canvas.getContext('2d')!.getImageData(1, 1, 1, 1).data;
+  const bg = `rgb(${px[0]},${px[1]},${px[2]})`;
+  const start = performance.now();
+  let frame = 0;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / ms);
+    if (t >= 1) { finish(); return; }
+    const e = easeInOut(t);
+    const l = (u: number, v: number) => u + (v - u) * e;
+    // When the size changes (Story, Post, Square) the frame itself grows or
+    // shrinks; both layouts stay centered in it while the covers travel.
+    const W = Math.round(l(W1, W2)), H = Math.round(l(H1, H2));
+    if (canvas.width !== W || canvas.height !== H) {
+      canvas.width = W; canvas.height = H;
+      canvas.style.aspectRatio = `${W} / ${H}`;
+    }
+    const ax = (W - W1) / 2, ay = (H - H1) / 2, bx = (W - W2) / 2, by = (H - H2) / 2;
+    const ctx = canvas.getContext('2d')!;
+    ctx.globalAlpha = 1;
+    if (resizing) { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+    ctx.globalAlpha = resizing ? 1 - e : 1;
+    ctx.drawImage(a.canvas, ax, ay);
+    ctx.globalAlpha = e;
+    ctx.drawImage(b.canvas, bx, by);
+    // Covers leaving fade out; covers arriving fade in; the rest travel.
+    a.placed.forEach((pa, img) => {
+      if (b.placed.has(img)) return;
+      ctx.globalAlpha = 1 - e; pa.draw(ctx, pa.x + ax, pa.y + ay, pa.w, pa.h);
+    });
+    b.placed.forEach((pb, img) => {
+      const pa = a.placed.get(img);
+      if (!pa) { ctx.globalAlpha = e; pb.draw(ctx, pb.x + bx, pb.y + by, pb.w, pb.h); return; }
+      ctx.globalAlpha = 1;
+      // Mid-way it takes on its new look (shadow style) as well as its new place.
+      (e < 0.5 ? pa.draw : pb.draw)(ctx, l(pa.x + ax, pb.x + bx), l(pa.y + ay, pb.y + by), l(pa.w, pb.w), l(pa.h, pb.h));
+    });
+    ctx.globalAlpha = 1;
+    frame = requestAnimationFrame(step);
+  };
+  // First frame now, so the browser never paints the canvas cleared.
+  step(start);
+  return () => cancelAnimationFrame(frame);
 }
