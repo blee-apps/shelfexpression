@@ -1,7 +1,7 @@
 // Full-screen share studio: a live preview of the share image, with options
 // for size, layout, background and text, and a button to share or save it.
 import { useEffect, useRef, useState } from 'react';
-import { X, Share2, Download, GripVertical } from 'lucide-react';
+import { X, Share2, Download, GripVertical, ChevronLeft } from 'lucide-react';
 import type { Book } from '../books';
 import { renderShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 
@@ -134,8 +134,8 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
       fontFamily: 'Manrope, system-ui, sans-serif', color: '#1a1a1a',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', paddingTop: 'max(10px, env(safe-area-inset-top))', background: '#fff', borderBottom: '1px solid #e5e5e5' }}>
-        <button onClick={() => onClose(order)} style={btn(true)} aria-label="Back"><X size={16} /></button>
-        <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Share image</span>
+        <button onClick={() => onClose(order)} style={btn(true)} aria-label="Back to picking books"><ChevronLeft size={16} /></button>
+        <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Share Studio</span>
         <span style={{ fontSize: '0.75rem', color: '#999' }}>{order.length} {order.length === 1 ? 'book' : 'books'}</span>
         <div style={{ flex: 1 }} />
         {canShareFiles && <button onClick={download} style={btn(true)} title="Download"><Download size={15} /></button>}
