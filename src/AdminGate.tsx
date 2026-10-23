@@ -12,7 +12,7 @@ const UpdateTool = lazy(() => import('./UpdateTool'));
 interface Props { onClose: () => void; books: Book[] }
 
 export default function AdminGate({ onClose, books }: Props) {
-  const [state, setState] = useState<'checking' | 'locked' | 'open'>(import.meta.env.DEV ? 'open' : 'checking');
+  const [state, setState] = useState<'checking' | 'locked' | 'open' | 'guest'>(import.meta.env.DEV ? 'open' : 'checking');
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -38,6 +38,14 @@ export default function AdminGate({ onClose, books }: Props) {
     setToken('');
     setState('open');
   };
+
+  if (state === 'guest') {
+    return (
+      <Suspense fallback={null}>
+        <UpdateTool books={books} onClose={onClose} guest />
+      </Suspense>
+    );
+  }
 
   if (state === 'open') {
     return (
@@ -69,7 +77,7 @@ export default function AdminGate({ onClose, books }: Props) {
                 ? <>Paste a GitHub fine-grained key with access to <b>{SITE.github.repo}</b>. It stays on this device.</>
                 : <>To edit on the live site, first set <b>github.repo</b> in <code>content/site.ts</code> to this site’s GitHub repo.</>}
             </p>
-            <form onSubmit={e => { e.preventDefault(); unlock(); }}>
+            {SITE.github.repo && <form onSubmit={e => { e.preventDefault(); unlock(); }}>
               <input type="password" value={token} onChange={e => setToken(e.target.value)} autoFocus
                 placeholder="github_pat_…" autoComplete="off" autoCapitalize="off" spellCheck={false}
                 style={{ width: '100%', padding: '9px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: '16px', fontFamily: 'ui-monospace, Menlo, monospace', boxSizing: 'border-box' }} />
@@ -78,10 +86,19 @@ export default function AdminGate({ onClose, books }: Props) {
                 style={{ marginTop: 12, width: '100%', padding: '9px 14px', border: 'none', borderRadius: 6, background: '#1a1a1a', color: '#fff', fontSize: '0.85rem', fontWeight: 500, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Checking…' : 'Unlock'}
               </button>
-            </form>
-            <p style={{ fontSize: '0.72rem', color: '#999', lineHeight: 1.5, margin: '12px 0 0' }}>
+            </form>}
+            {SITE.github.repo && <p style={{ fontSize: '0.72rem', color: '#999', lineHeight: 1.5, margin: '12px 0 0' }}>
               Make one at github.com → Settings → Developer settings → Fine-grained tokens. Choose only this repo, and give it Contents: Read and write.
-            </p>
+            </p>}
+            <div style={{ borderTop: '1px solid #eee', margin: '16px 0 0', paddingTop: 14 }}>
+              <button onClick={() => setState('guest')}
+                style={{ width: '100%', padding: '9px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', color: '#1a1a1a', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer' }}>
+                Continue as guest
+              </button>
+              <p style={{ fontSize: '0.72rem', color: '#999', lineHeight: 1.5, margin: '8px 0 0', textAlign: 'center' }}>
+                Try the editor and make share images. Nothing is published.
+              </p>
+            </div>
           </>
         )}
       </div>

@@ -16,6 +16,9 @@ interface Props {
   books: Book[];
   // On the live site: removes the saved GitHub key from this device.
   onForgetKey?: () => void;
+  // Guest mode: try the editor and share studio without a key. Nothing is
+  // published or kept as a draft.
+  guest?: boolean;
 }
 
 const SLOT_COUNT = 24;
@@ -76,7 +79,7 @@ const orKey: string = import.meta.env.DEV ? (import.meta.env.VITE_OPENROUTER_API
 const OR_STORAGE_KEY = 'orModel';
 const SEARCH_HINT = 'Type a title and author, then press Enter. Searches Apple Books, Google Books and OpenLibrary.';
 
-export default function UpdateTool({ onClose, books, onForgetKey }: Props) {
+export default function UpdateTool({ onClose, books, onForgetKey, guest = false }: Props) {
   const [slots, setSlots] = useState<(Book | null)[]>(() => {
     const arr: (Book | null)[] = new Array(SLOT_COUNT).fill(null);
     books.forEach((b, i) => {
@@ -703,6 +706,7 @@ export default function UpdateTool({ onClose, books, onForgetKey }: Props) {
   // be a few minutes behind after a publish), then offer any unpublished draft.
   useEffect(() => {
     if (import.meta.env.DEV) return;
+    if (guest) { setStartupDone(true); return; }
     (async () => {
       const token = getToken();
       const latest = token ? await fetchLatestShelf(token) : null;
@@ -729,7 +733,7 @@ export default function UpdateTool({ onClose, books, onForgetKey }: Props) {
 
   // Keep unpublished changes on this device as you work.
   useEffect(() => {
-    if (import.meta.env.DEV || !startupDone || draftOffer) return;
+    if (import.meta.env.DEV || guest || !startupDone || draftOffer) return;
     if (hasChanges) saveDraft({ json: currentJson, baseJson, savedAt: Date.now() });
     else clearDraft();
   }, [currentJson, baseJson, startupDone, draftOffer, hasChanges]);
@@ -908,8 +912,15 @@ export default function UpdateTool({ onClose, books, onForgetKey }: Props) {
         </div>
       </div>
 
+      {/* GUEST MODE */}
+      {guest && !shareMode && (
+        <div style={{ padding: '10px 20px', borderBottom: '1px solid #eee', flexShrink: 0, background: '#fafafa', fontSize: '0.8rem', color: '#555', lineHeight: 1.45 }}>
+          <b style={{ color: '#1a1a1a' }}>Guest mode.</b> Look around and make share images. Your edits aren’t saved or published.
+        </div>
+      )}
+
       {/* PUBLISH (live site only) */}
-      {!import.meta.env.DEV && !shareMode && (
+      {!import.meta.env.DEV && !guest && !shareMode && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
           padding: '8px 20px', borderBottom: '1px solid #eee', flexShrink: 0, background: '#fafafa',
