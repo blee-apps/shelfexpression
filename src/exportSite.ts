@@ -29,7 +29,7 @@ not in a subfolder (like example.com/books).
 
 ${s.editor
   ? `To change it later: open the site, press Ctrl+Shift+U (Cmd+Shift+U on a Mac)
-or tap the heading 5 times, edit your books, then Create Static Site
+or tap the heading 5 times, edit your books, then Export site
 again and upload the new folder over the old one.`
   : `This site has no editor. To change it, make a new one from the
 editor you used before.`}
@@ -87,7 +87,7 @@ export async function createStaticSite(opts: {
     list = (await r.json()).files;
   } catch {
     throw new Error(import.meta.env.DEV
-      ? 'Create Static Site needs a built site. Run npm run build, then npm run preview, and try there.'
+      ? 'Export site needs a built site. Run npm run build, then npm run preview, and try there.'
       : 'This site is missing its file list (site-files.json). Rebuild it with the newest version.');
   }
 
