@@ -172,7 +172,11 @@ const DynamicCover = ({ book, eager = false }: { book: Book; eager?: boolean }) 
   const aspectRatio = useBookAspectRatio(book);
 
   return (
-    <div className="relative w-full" style={{ aspectRatio, backgroundColor: failed ? getColorForString(book.title) : 'rgba(0,0,0,0.05)' }}>
+    <div className="relative w-full" style={{ aspectRatio, backgroundColor: failed ? getColorForString(book.title) : 'transparent' }}>
+      {/* Holding shape while the cover loads: a dotted outline of the book */}
+      {!loaded && !failed && (
+        <div aria-hidden className="absolute inset-0 rounded-xs border-2 border-dotted border-black/30 dark:border-white/30" />
+      )}
       {url && (
         <img
           key={url}
