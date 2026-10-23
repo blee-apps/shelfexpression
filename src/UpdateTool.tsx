@@ -918,7 +918,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       {guest && !shareMode && (
         <div style={{ padding: '10px 20px', borderBottom: '1px solid #eee', flexShrink: 0, background: '#fafafa', fontSize: '0.8rem', color: '#555', lineHeight: 1.45 }}>
           {IS_STATIC_SITE
-            ? <><b style={{ color: '#1a1a1a' }}>Static site.</b> Edit your books, then use Create Static Site to download the updated site and upload it again.</>
+            ? <><b style={{ color: '#1a1a1a' }}>Static site.</b> Edit your books, then use Export site to download the updated site and upload it again.</>
             : <><b style={{ color: '#1a1a1a' }}>Guest mode.</b> Look around, make share images, or create a static site. Nothing is published.</>}
         </div>
       )}
@@ -1006,34 +1006,25 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       )}
 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {/* SHARE */}
+        {/* SHARE + HOST IT YOURSELF: side by side when there's room, stacked on a phone */}
         {!shareMode && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-            border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', marginBottom: 16,
-            background: 'linear-gradient(135deg, #fafafa, #f3f1ee)',
-          }}>
-            <Share2 size={18} style={{ color: '#555', flexShrink: 0 }} />
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Share your favorites</div>
-              <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
+          <div className="admin-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 12, marginBottom: 16 }}>
+            <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #fafafa, #f3f1ee)' }}>
+              <Share2 size={18} style={{ color: '#555', flexShrink: 0 }} />
+              <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Share your favorites</div>
+                <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
+              </div>
+              <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Create image</button>
             </div>
-            <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={btnStyle({ small: true })}>Make a share image</button>
-          </div>
-        )}
-
-        {/* HOST IT YOURSELF */}
-        {!shareMode && (
-          <div className="admin-static-card" style={{
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-            border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', marginBottom: 16, background: '#fafafa',
-          }}>
-            <Globe size={18} style={{ color: '#555', flexShrink: 0 }} />
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Host it yourself</div>
-              <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Download your shelf as a website for any web host. No GitHub needed.</div>
+            <div className="admin-static-card" style={{ ...cardStyle, background: '#fafafa' }}>
+              <Globe size={18} style={{ color: '#555', flexShrink: 0 }} />
+              <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Host it yourself</div>
+                <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Download your shelf as a website for any web host. No GitHub needed.</div>
+              </div>
+              <button onClick={() => setStaticOpen(true)} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Export site</button>
             </div>
-            <button onClick={() => setStaticOpen(true)} style={btnStyle({ small: true })}>Create Static Site</button>
           </div>
         )}
 
@@ -1755,6 +1746,12 @@ const btnStyle = ({ secondary, small }: { secondary?: boolean; small?: boolean }
   transition: 'background 0.15s',
   textDecoration: 'none',
 });
+
+const cardStyle: React.CSSProperties = {
+  // Icon, text and button stay in one row; the text wraps, the button stays on the right.
+  display: 'flex', alignItems: 'center', gap: 12,
+  border: '1px solid #eee', borderRadius: 10, padding: '12px 14px', minWidth: 0,
+};
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '7px 9px', border: '1px solid #ddd',

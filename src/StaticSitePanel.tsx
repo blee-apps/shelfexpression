@@ -72,7 +72,7 @@ export default function StaticSitePanel({ getContent, bookCount, onClose }: {
         overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Create Static Site</span>
+          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Export site</span>
           <button onClick={onClose} disabled={busy} style={btn({ secondary: true, small: true })} aria-label="Close"><X size={14} /></button>
         </div>
 

@@ -54,7 +54,7 @@ To change the look, use the **Shelf** and **Mode** switches below the editor's b
 
 ### 5. Share your favorites
 
-Tap **Make a share image** in the editor, or **Share** on a book. Pick up to 12 books in the order you want them, then tap **Next**. You get a live preview with:
+Tap **Create image** in the editor, or **Share** on a book. Pick up to 12 books in the order you want them, then tap **Next**. You get a live preview with:
 
 - **Sizes:** Story (9:16), Post (4:5) and Square.
 - **Layouts:** Grid, with optional titles, or Shelf. A single book gets Feature, aligned left or centered, with an optional synopsis.
@@ -65,11 +65,11 @@ On an iPhone, **Share** opens the share sheet, so you can save the image to Phot
 
 ### 6. Host it yourself, without GitHub
 
-You don't need GitHub or Vercel to have a shelf. In the editor, tap **Create Static Site** (under *Host it yourself*). Fill in your site name, link, heading, the line under it (`{count}` becomes the number of books) and up to five menu links, then tap **Download**.
+You don't need GitHub or Vercel to have a shelf. In the editor, tap **Export site** (under *Host it yourself*). Fill in your site name, link, heading, the line under it (`{count}` becomes the number of books) and up to five menu links, then tap **Download**.
 
 You get a zip with a complete website: your books, every cover, and your shelf style, mode and share footer. Unzip it and upload the folder to any web host, such as Netlify Drop, Cloudflare Pages, Neocities or your own server. Put it at the top of an address (like `books.example.com`), not in a subfolder.
 
-Turn on **Include the editor** to edit on that site later. It opens the same way (the keystroke or five taps), with no key and no Publish. Make your changes, tap **Create Static Site** again, and upload the new folder over the old one. On a plain host, some covers can't be fetched from book sites, but uploading your own image always works.
+Turn on **Include the editor** to edit on that site later. It opens the same way (the keystroke or five taps), with no key and no Publish. Make your changes, tap **Export site** again, and upload the new folder over the old one. On a plain host, some covers can't be fetched from book sites, but uploading your own image always works.
 
 **Guest mode.** Anyone who finds the editor on your site can tap **Continue as guest** to try it, make share images or create a static site. Nothing is ever published. To turn that off, set `guestMode: false` in `content/site.ts`. Then the editor only opens with your GitHub key.
 
@@ -108,7 +108,7 @@ content/covers/           Saved cover images (served at /covers/)
 digital_bookshelf.tsx     The shelf, animations and detail view
 src/AdminGate.tsx         Asks for a GitHub key before the editor opens on the live site
 src/UpdateTool.tsx        The editor
-src/exportSite.ts         Create Static Site: zips the site with your books inside
+src/exportSite.ts         Export site: zips the site with your books inside
 src/shelfData.ts          Reads your books and site details (or a static site's own copy)
 src/publish.ts            Publishing to GitHub, drafts and deploy status
 src/share/                Share images: drawing and the share studio
