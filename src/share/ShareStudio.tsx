@@ -271,7 +271,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         @media (max-width: 700px) {
           /* Preview stays put at the top; the options scroll underneath it. */
           .share-body { flex-direction: column; flex-wrap: nowrap !important; align-items: stretch !important; padding: 0 !important; gap: 0 !important; overflow: hidden !important; }
-          .share-preview { position: static !important; flex: none !important; height: auto !important; padding: 12px; border-bottom: 1px solid #e2e2e2; }
+          .share-preview { position: static !important; flex: none !important; height: auto !important; align-self: stretch !important; padding: 12px; }
           .share-preview canvas { max-height: 42vh !important; }
           .share-controls { max-width: none !important; flex: 1 1 auto !important; min-height: 0; overflow-y: auto; padding: 12px 12px max(16px, env(safe-area-inset-bottom)) !important; gap: 12px !important; }
           .share-studio input { font-size: 16px !important; }
