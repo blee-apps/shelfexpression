@@ -179,7 +179,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
 
         <div className="share-controls" style={{ flex: '1 1 300px', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <Section label="Books" hint={order.length > 1 ? 'Drag to reorder' : undefined}>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 2px 6px' }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 8px 6px 2px' }}>
               {order.map((b, i) => (
                 <div key={b.id} data-strip={i}
                   onPointerDown={onStripDown(i)} onPointerMove={onStripMove} onPointerUp={onStripUp} onPointerCancel={onStripUp}
