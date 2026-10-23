@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Book, BOOKS, USE_VITSOE_SHELF, COLOR_MODE } from './src/books';
-import { SITE } from './content/site';
-import coverManifest from './src/generated/cover-manifest.json';
+import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
 
 const AdminGate = lazy(() => import('./src/AdminGate'));
 
@@ -61,9 +60,7 @@ const gbUrl = (path: string) => path + (gbKey ? `&key=${gbKey}` : '');
 const MIN_COVER_HEIGHT = 300;
 const LOOKUP_TIMEOUT_MS = 3000;
 
-const manifestEntry = (book: Book) =>
-  coverManifest[(book.isbn || book.id) as keyof typeof coverManifest] as
-    { path: string | null; aspectRatio: number | null } | undefined;
+const manifestEntry = (book: Book) => coverInfo(book);
 
 // Covers we already have a URL for: the book's own coverUrl, then the copy
 // downloaded at build time. No network lookups needed.
@@ -579,7 +576,7 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'U' || e.key === 'u')) {
+      if (EDITOR_AVAILABLE && (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'U' || e.key === 'u')) {
         e.preventDefault();
         setShowAdmin(v => !v);
         return;
@@ -909,6 +906,7 @@ export default function App() {
         <div className="mb-6 md:mb-6">
           <h1 className="text-4xl md:text-5xl font-serif text-gray-900 dark:text-neutral-100 mb-4 select-none"
             onClick={() => {
+              if (!EDITOR_AVAILABLE) return;
               const t = titleTapRef.current;
               t.count++;
               if (t.timer) clearTimeout(t.timer);

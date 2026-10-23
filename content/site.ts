@@ -24,4 +24,10 @@ export const SITE = {
   // change on a Vercel preview first.
   // Set `repo` to your own, written as 'your-name/your-repo'.
   github: { repo: '', branch: 'main', testBranch: 'editor-test' },
+
+  // Lets visitors who find the editor try it without a key: make share images
+  // or download a static site with Create Static Site. Nothing is ever
+  // published. Set it to false if you don't want strangers using your site
+  // as a tool.
+  guestMode: true,
 };

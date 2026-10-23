@@ -1,6 +1,6 @@
 // Publishing from the editor on the live site: one commit to GitHub with the
 // book list and any new cover files. Vercel sees the commit and redeploys.
-import { SITE } from '../content/site';
+import { SITE } from './shelfData';
 import { githubHeaders } from './github';
 
 // --- Covers waiting to be published -------------------------------------
@@ -52,14 +52,23 @@ export function addPendingCover(key: string, blob: Blob): string {
 
 // Downloads a cover from a book site (through /api/cover, since those sites
 // don't let the browser read their images directly) and resizes it.
+// On a static site there's no /api/cover, so it asks the book site directly,
+// which works for the ones that allow it (like OpenLibrary).
 export async function fetchCover(src: string): Promise<Blob> {
-  const r = await fetch(`/api/cover?src=${encodeURIComponent(src)}`);
-  if (!r.ok) {
-    let msg = `HTTP ${r.status}`;
-    try { msg = (await r.json()).error || msg; } catch {}
-    throw new Error(msg);
-  }
-  return resizeCover(await r.blob());
+  let r: Response | null = null;
+  try { r = await fetch(`/api/cover?src=${encodeURIComponent(src)}`); } catch {}
+  const isImage = r?.ok && /^image\//.test(r.headers.get('content-type') || '');
+  if (r && isImage) return resizeCover(await r.blob());
+  try {
+    const direct = await fetch(src, { mode: 'cors', signal: AbortSignal.timeout(15000) });
+    if (direct.ok) return resizeCover(await direct.blob());
+  } catch {}
+  // No cover helper here (a static site): the page came back instead of JSON.
+  const isJson = /json/.test(r?.headers.get('content-type') || '');
+  if (!r || !isJson) throw new Error('this site can\u2019t download covers from that source. Upload a photo instead');
+  let msg = `HTTP ${r.status}`;
+  try { msg = (await r.json()).error || msg; } catch {}
+  throw new Error(msg);
 }
 
 // --- Commit message -------------------------------------------------------
