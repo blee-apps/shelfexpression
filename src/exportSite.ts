@@ -1,4 +1,4 @@
-// Create Static Site: zips this site's built files with the current shelf
+// Export site: zips this site's built files with the current shelf
 // written into index.html, plus every cover, ready to upload to any host.
 import { pendingCovers } from './publish';
 import { COVER_MANIFEST, StaticShelf, StaticSiteSettings, CoverInfo } from './shelfData';
@@ -79,16 +79,24 @@ export async function createStaticSite(opts: {
   const { content, site, onStep } = opts;
   const { zipSync, strToU8 } = await import('fflate');
 
+  // Locally (npm run dev) the dev server makes a fresh build to pack.
+  let base = '/';
+  if (import.meta.env.DEV) {
+    onStep?.('Building the site\u2026');
+    const r = await fetch('/api/export-build', { method: 'POST' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) throw new Error(data.error || `The build failed (HTTP ${r.status}).`);
+    base = data.base;
+  }
+
   onStep?.('Getting the site files\u2026');
   let list: string[];
   try {
-    const r = await fetch('/site-files.json', { cache: 'no-cache' });
+    const r = await fetch(`${base}site-files.json`, { cache: 'no-cache' });
     if (!r.ok) throw new Error();
     list = (await r.json()).files;
   } catch {
-    throw new Error(import.meta.env.DEV
-      ? 'Export site needs a built site. Run npm run build, then npm run preview, and try there.'
-      : 'This site is missing its file list (site-files.json). Rebuild it with the newest version.');
+    throw new Error('This site is missing its file list (site-files.json). Rebuild it with the newest version.');
   }
 
   const files: Record<string, [Uint8Array, { level: 0 | 6 }]> = {};
@@ -99,10 +107,10 @@ export async function createStaticSite(opts: {
 
   let indexHtml = '';
   await Promise.all(list.map(async path => {
-    if (path === 'index.html') { indexHtml = new TextDecoder().decode(await getFile('/index.html')); return; }
-    add(path, await getFile(`/${path}`));
+    if (path === 'index.html') { indexHtml = new TextDecoder().decode(await getFile(`${base}index.html`)); return; }
+    add(path, await getFile(`${base}${path}`));
   }));
-  if (!indexHtml) indexHtml = new TextDecoder().decode(await getFile('/index.html'));
+  if (!indexHtml) indexHtml = new TextDecoder().decode(await getFile(`${base}index.html`));
   add('site-files.json', strToU8(JSON.stringify({ files: list }, null, 2) + '\n'));
 
   // Covers: each book's own cover (waiting in the editor, or on this site),
@@ -148,6 +156,22 @@ export async function createStaticSite(opts: {
     covers: coverCount,
     missingCovers,
   };
+}
+
+// Locally, keeps what you just exported in content/books.json and
+// content/site.ts. Returns a line for the status message.
+export async function saveLocally(content: unknown, site: StaticSiteSettings): Promise<string> {
+  const { editor: _editor, ...details } = site;
+  try {
+    const r = await fetch('/api/save-shelf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, site: details }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    return data.siteSaved
+      ? ' Saved to content/books.json and content/site.ts.'
+      : ' Saved to content/books.json. content/site.ts looked hand-edited, so it was left alone.';
+  } catch (err: any) {
+    return ` Couldn\u2019t save your shelf locally (${err.message}).`;
+  }
 }
 
 // Saves the zip. On iPhone and iPad this opens the share sheet (Save to Files);

@@ -1,8 +1,8 @@
-// The Create Static Site sheet: a few site details, then a zip to download.
+// The Export site sheet: a few site details, then a zip to download.
 import { useState } from 'react';
 import { X, Plus, Trash2, Download } from 'lucide-react';
 import { SITE, StaticSiteSettings, NavLink, subtitleTemplate } from './shelfData';
-import { createStaticSite, saveZip, loadSiteSettings, saveSiteSettings } from './exportSite';
+import { createStaticSite, saveZip, saveLocally, loadSiteSettings, saveSiteSettings } from './exportSite';
 
 const MAX_LINKS = 5;
 
@@ -47,10 +47,12 @@ export default function StaticSitePanel({ getContent, bookCount, onClose }: {
         nav: s.nav.filter(l => l.label.trim() && l.href.trim())
           .map(l => ({ label: l.label.trim(), href: l.href.trim(), ...(l.href.trim() === '/' ? { current: true } : {}) })),
       };
-      const res = await createStaticSite({ content: getContent(), site, onStep: text => setStatus({ text }) });
+      const content = getContent();
+      const res = await createStaticSite({ content, site, onStep: text => setStatus({ text }) });
       await saveZip(res.blob, res.fileName);
+      const saved = import.meta.env.DEV ? await saveLocally(content, site) : '';
       setStatus({
-        text: `Made ${res.fileName}: ${res.books} books and ${res.covers} covers.` +
+        text: `Made ${res.fileName}: ${res.books} books and ${res.covers} covers.` + saved +
           (res.missingCovers.length ? ` Couldn\u2019t include the cover for ${res.missingCovers.map(t => `\u201c${t}\u201d`).join(', ')}.` : ''),
         error: res.missingCovers.length > 0,
       });
