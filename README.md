@@ -17,34 +17,45 @@ npm run dev
 
 Open the address it prints (usually http://localhost:5173).
 
-### 2. Add your books with the editor
+### 2. Set your site details
 
-Press **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows) to open the editor. On a phone, tap the big heading five times.
+Edit `content/site.ts` to set your site name, link, heading, subtitle and header menu. Set `github.repo` to your new repo (for example `'your-name/your-shelf'`) so you can edit from the live site later.
 
-1. Click an empty slot, or **Edit** on a sample book.
-2. Type the title and author and press Enter. The editor searches **Apple Books, Google Books and OpenLibrary** at the same time.
-3. Pick the right book. The title, author, year, ISBN and synopsis fill in, and the editor finds the book's **Goodreads page** for you.
-4. Choose a cover. Covers are sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
-5. Press **Save**. The chosen cover is saved into `public/covers/` in your project.
+### 3. Publish
 
-Drag slots to reorder them. When you're happy, click **Generate**, copy the code and paste it into `src/books.ts`, replacing what's there.
+Push your repo to GitHub and import it into [Vercel](https://vercel.com/new). The defaults just work: the build command is `npm run build` and the output folder is `dist`. Every push to `main` goes live.
 
-> The Goodreads lookup and cover saving only work while running `npm run dev` on your computer.
+The site is fully static. Covers are saved in your repo, so it never depends on other websites at runtime. Netlify or any static host works too, but book search, Goodreads lookup and cover fetching on the live site use small Vercel functions in `api/`. Elsewhere, add books locally with `npm run dev`.
 
-### 3. Set your site details
+### 4. Add your books with the editor
 
-Edit `src/site.ts` to set your site name, link, heading, subtitle and header menu.
+Open the editor with **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows). On a phone, tap the big heading five times.
 
-To switch between the two shelf styles, set `USE_VITSOE_SHELF` in `src/books.ts`:
+On the live site, it first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device. Anyone else who finds the editor can't get past this step.
+
+1. Tap **Add book**, then type the title and author. The editor searches **Apple Books, Google Books and OpenLibrary** at once.
+2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
+3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
+4. Tap a book to edit it, and drag the number to reorder. Your changes are kept on the device as a draft until you publish.
+5. Tap **Publish**. The editor commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview.
+
+Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`. When you're done, tap **Generate**, paste the code into `content/books.json`, and commit.
+
+To switch between the two shelf styles, tick **Enable Vitsoe Bookshelf** under the editor's Advanced section, or set `useVitsoeShelf` in `content/books.json`:
 
 - `true`: a Vitsoe 606 shelf with birch boards and aluminum rails. Hovering a book lifts and tilts it, as if you're picking it off the shelf.
 - `false`: a clean, minimal gallery with covers floating on a flat background.
 
-### 4. Publish
+### 5. Share your favorites
 
-Push your repo to GitHub and import it into [Vercel](https://vercel.com/new), Netlify or any static host. The defaults just work: the build command is `npm run build` and the output folder is `dist`.
+Tap **Make a share image** in the editor, or **Share** on a book. Pick up to 12 books in the order you want them, then tap **Next**. You get a live preview with:
 
-During the build, covers for any book without a saved cover are downloaded automatically, so the site never depends on other websites at runtime.
+- **Sizes:** Story (9:16), Post (4:5) and Square.
+- **Layouts:** Grid, with optional titles, or Shelf. A single book gets Feature, aligned left or centered, with an optional synopsis.
+- **Backgrounds:** Paper, White, Dark, or a color taken from the first cover.
+- **Text:** an optional heading, and a footer line such as your website. The footer is remembered, and saved with your books when you publish.
+
+On an iPhone, **Share** opens the share sheet, so you can save the image to Photos or post it straight to Instagram. Elsewhere, it downloads.
 
 ## Optional API keys
 
@@ -59,32 +70,41 @@ Everything works without keys. Add these to a `.env` file in the project folder 
 
 ## Book fields
 
-Each book in `src/books.ts` looks like this:
+`content/books.json` holds your books in shelf order. Each one looks like this:
 
 | Field | Description |
 |-------|-------------|
-| `id` | Position on the shelf, as a string (`'1'`, `'2'`…). |
+| `id` | Position on the shelf, as a string (`"1"`, `"2"`…). |
 | `isbn` | Used to find covers and to name the saved cover file. |
 | `title`, `author`, `year` | Shown in the detail view. |
 | `synopsis` | Short description shown in the detail view. |
 | `gr` | Goodreads book ID, used for the "View on Goodreads" link. |
-| `coverUrl` | *(Optional)* The cover to use, set by the editor. |
-| `coverLocked` | *(Optional)* Keeps the build from replacing a saved cover. |
+| `coverUrl` | The saved cover, such as `/covers/9780441478125.jpg`. |
+
+Two settings sit alongside the books: `useVitsoeShelf`, and `share.footer` (the footer line on share images).
 
 ## How it's put together
 
 ```
-src/site.ts               Your site name, heading and menu
-src/books.ts              Your books and shelf style
-src/UpdateTool.tsx        The editor
-src/bookSearch.ts         Apple Books / Google Books / OpenLibrary search
+content/site.ts           Your site name, heading, menu and GitHub repo
+content/books.json        Your books and shelf style
+content/covers/           Saved cover images (served at /covers/)
 digital_bookshelf.tsx     The shelf, animations and detail view
-scripts/download-covers.ts  Downloads covers at build time
-vite.config.ts            Local-only helpers for the editor (cover saving, Goodreads lookup)
-public/covers/            Saved cover images
+src/AdminGate.tsx         Asks for a GitHub key before the editor opens on the live site
+src/UpdateTool.tsx        The editor
+src/publish.ts            Publishing to GitHub, drafts and deploy status
+src/share/                Share images: drawing and the share studio
+src/bookSearch.ts         Apple Books / Google Books / OpenLibrary search
+api/, server/lookup.ts    Goodreads and cover lookups (Vercel functions, and the dev server)
+scripts/measure-covers.ts Measures saved covers at build time
+vite.config.ts            Local-only helpers for the editor (saving covers and books)
 ```
 
 Fonts (DM Serif Text and Manrope) are self-hosted, so no requests go to Google.
+
+### Updating from an older version
+
+Older copies kept books in `src/books.ts` and covers in `public/covers/`. Move your books into `content/books.json`, your covers into `content/covers/`, and your site details into `content/site.ts`.
 
 ## Credits
 

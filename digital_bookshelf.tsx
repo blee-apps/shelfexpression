@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Book, BOOKS, USE_VITSOE_SHELF } from './src/books';
-import { SITE } from './src/site';
+import { SITE } from './content/site';
 import coverManifest from './src/generated/cover-manifest.json';
 
-const UpdateTool = lazy(() => import('./src/UpdateTool'));
+const AdminGate = lazy(() => import('./src/AdminGate'));
 
 
 // --- UTILITIES ---
@@ -1217,7 +1217,7 @@ export default function App() {
         </div>
       )}
       <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center text-white text-xl">Loading admin…</div>}>
-        {showAdmin && <UpdateTool books={BOOKS} onClose={() => setShowAdmin(false)} />}
+        {showAdmin && <AdminGate books={BOOKS} onClose={() => setShowAdmin(false)} />}
       </Suspense>
     </div>
   );

@@ -17,4 +17,11 @@ export const SITE = {
     // { label: 'About', href: 'https://example.com/about/' },
     // { label: 'Bookshelf', href: '/', current: true },
   ] as { label: string; href: string; current?: boolean }[],
+
+  // The GitHub repo this site is published from. The editor on the live site
+  // asks for a GitHub key that can write to this repo before it opens.
+  // Publish goes to `branch` (the live site), or to `testBranch` to try a
+  // change on a Vercel preview first.
+  // Set `repo` to your own, written as 'your-name/your-repo'.
+  github: { repo: '', branch: 'main', testBranch: 'editor-test' },
 };

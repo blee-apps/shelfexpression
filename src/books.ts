@@ -1,3 +1,6 @@
+// Your books live in content/books.json. This file just reads them in.
+import content from '../content/books.json';
+
 export interface Book {
   id: string; isbn: string; title: string; author: string;
   year: number; synopsis: string; gr: string; mult: number;
@@ -5,18 +8,14 @@ export interface Book {
   coverLocked?: boolean;
 }
 
-export const RAW_BOOKS = [
-  { id: '1', isbn: '9780441478125', title: "The Left Hand of Darkness", author: "Ursula K. Le Guin", year: 1969, synopsis: "An envoy from a galactic union travels to Gethen, a frozen world whose people have no fixed gender. As he navigates court intrigue and an unlikely friendship, his assumptions about loyalty and identity begin to thaw.", gr: '18423', coverUrl: '/covers/9780441478125.jpg', coverLocked: true },
-  { id: '2', isbn: '9781400078776', title: "Never Let Me Go", author: "Kazuo Ishiguro", year: 2005, synopsis: "Kathy looks back on her years at Hailsham, an idyllic English boarding school, and slowly pieces together what its students were really being raised for. A quiet, devastating novel about memory, love and what makes a life.", gr: '6334', coverUrl: '/covers/9781400078776.jpg', coverLocked: true },
-  { id: '3', isbn: '9780804172448', title: "Station Eleven", author: "Emily St. John Mandel", year: 2014, synopsis: "Twenty years after a pandemic collapses civilization, a troupe of actors and musicians travels the Great Lakes performing Shakespeare. Their story weaves back to a famous actor's death on the night the world ended.", gr: '20170404', coverUrl: '/covers/9780804172448.jpg', coverLocked: true },
-  { id: '4', isbn: '9780679731726', title: "The Remains of the Day", author: "Kazuo Ishiguro", year: 1989, synopsis: "Stevens, an aging English butler, takes a rare road trip and reflects on decades of devoted service. Along the way, the cost of his restraint, in work and in love, comes painfully into focus.", gr: '28921', coverUrl: '/covers/9780679731726.jpg', coverLocked: true },
-  { id: '5', isbn: '9781635575637', title: "Piranesi", author: "Susanna Clarke", year: 2020, synopsis: "Piranesi lives in the House, an endless labyrinth of marble halls and statues washed by tides. He records its wonders in his journals, until clues begin to suggest there is another world beyond it.", gr: '50202953', coverUrl: '/covers/9781635575637.jpg', coverLocked: true },
-  { id: '6', isbn: '9780593318171', title: "Klara and the Sun", author: "Kazuo Ishiguro", year: 2021, synopsis: "Klara, an Artificial Friend with a gift for observation, is chosen by a sickly teenage girl. Watching the family she now serves, she tries to understand the human heart and what she might do to save it.", gr: '54120408', coverUrl: '/covers/9780593318171.jpg', coverLocked: true },
-  { id: '7', isbn: '9780307387899', title: "The Road", author: "Cormac McCarthy", year: 2006, synopsis: "A father and his young son walk south through a burned, ash-covered America, carrying everything they own. Spare and harrowing, it's a story of survival and the fierce love that keeps them going.", gr: '6288', coverUrl: '/covers/9780307387899.jpg', coverLocked: true },
-  { id: '8', isbn: '9780547773742', title: "A Wizard of Earthsea", author: "Ursula K. Le Guin", year: 1968, synopsis: "Ged, a gifted and proud young wizard, unleashes a shadow upon the world while showing off. He must hunt it across the islands of Earthsea, and learn that some battles can only be won by facing yourself.", gr: '13642', coverUrl: '/covers/9780547773742.jpg', coverLocked: true },
-];
+export type RawBook = Omit<Book, 'mult'>;
 
-export const USE_VITSOE_SHELF = true;
+export const RAW_BOOKS: RawBook[] = content.books;
+
+export const USE_VITSOE_SHELF: boolean = content.useVitsoeShelf;
+
+// Footer line for share images, once you've set one in the editor.
+export const SHARE_FOOTER: string | undefined = (content as { share?: { footer?: string } }).share?.footer;
 
 export const BOOKS: Book[] = RAW_BOOKS.map(book => ({
   ...book,
