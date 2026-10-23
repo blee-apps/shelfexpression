@@ -1,6 +1,6 @@
 # Shelf Expression
 
-A beautiful, animated bookshelf for your website. Show off the books you love on a Vitsoe-style shelf. Click a cover and it lifts off the shelf, flies to the center and shows its synopsis and a Goodreads link.
+A beautiful, animated bookshelf for your website. Show off the books you love on a Vitsoe-style shelf or a minimal gallery, in light or dark. Click a cover and it lifts off the shelf, flies to the center and shows its synopsis and a Goodreads link.
 
 Built with React, TypeScript, Tailwind CSS and Vite. It's a fully static site, so it's fast, free to host and has no database.
 
@@ -41,10 +41,16 @@ On the live site, it first asks for a GitHub key that can write to your repo. Ma
 
 Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`. When you're done, tap **Generate**, paste the code into `content/books.json`, and commit.
 
-To switch between the two shelf styles, tick **Enable Vitsoe Bookshelf** under the editor's Advanced section, or set `useVitsoeShelf` in `content/books.json`:
+To change the look, use the **Shelf** and **Mode** switches below the editor's book grid, then publish. You can also set them in `content/books.json`. `useVitsoeShelf` picks the shelf style:
 
-- `true`: a Vitsoe 606 shelf with birch boards and aluminum rails. Hovering a book lifts and tilts it, as if you're picking it off the shelf.
-- `false`: a clean, minimal gallery with covers floating on a flat background.
+- `true`: a Vitsoe 606 shelf with slim aluminum tracks and off-white steel shelves. Hovering a book lifts and tilts it, as if you're picking it off the shelf.
+- `false`: a clean, minimal gallery with covers on a flat background. Hovering a cover makes it grow slightly.
+
+`colorMode` works with either style:
+
+- `light` (the default).
+- `dark`: a near-black page. The Vitsoe shelf turns graphite, on a charcoal wall.
+- `auto`: follows each visitor's device setting.
 
 ### 5. Share your favorites
 
@@ -52,7 +58,7 @@ Tap **Make a share image** in the editor, or **Share** on a book. Pick up to 12 
 
 - **Sizes:** Story (9:16), Post (4:5) and Square.
 - **Layouts:** Grid, with optional titles, or Shelf. A single book gets Feature, aligned left or centered, with an optional synopsis.
-- **Backgrounds:** Paper, White, Dark, or a color taken from the first cover.
+- **Backgrounds:** Paper, White, Dark, or a color taken from a cover. Use the arrows beside the Cover swatch to choose which book.
 - **Text:** an optional heading, and a footer line such as your website. The footer is remembered, and saved with your books when you publish.
 
 On an iPhone, **Share** opens the share sheet, so you can save the image to Photos or post it straight to Instagram. Elsewhere, it downloads.
@@ -81,7 +87,7 @@ Everything works without keys. Add these to a `.env` file in the project folder 
 | `gr` | Goodreads book ID, used for the "View on Goodreads" link. |
 | `coverUrl` | The saved cover, such as `/covers/9780441478125.jpg`. |
 
-Two settings sit alongside the books: `useVitsoeShelf`, and `share.footer` (the footer line on share images).
+Three settings sit alongside the books: `useVitsoeShelf`, `colorMode` (`light`, `dark` or `auto`), and `share.footer` (the footer line on share images).
 
 ## How it's put together
 

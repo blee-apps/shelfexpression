@@ -266,54 +266,89 @@ function drawGrid(ctx: CanvasRenderingContext2D, books: ShareBook[], o: ShareOpt
 }
 
 function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette, box: Box, W: number, H: number) {
+  // A Vitsoe 606, matching the site: slim aluminium tracks up both sides and
+  // thin powder-coated steel shelves with a folded front lip. The books stand
+  // on the front of each shelf's top surface, so no cover is hidden.
   const gap = 18;
-  const board = 20, lip = 6, below = 34; // board, its front edge, space under it
+  const LIP_MAX = 40, below = 44; // deepest lip, then room for its shadow
   const inner = { ...box, x: box.x + 18, w: box.w - 36 };
-  const rows = justify(books, inner.w, inner.h, gap, board + lip + below, 0, inner.h * 0.55);
-  const rowGap = board + lip + below;
-  const total = rows.reduce((s, r) => s + r.h, 0) + rowGap * rows.length - below;
+  const reserve = LIP_MAX + below;
+  const rows = justify(books, inner.w, inner.h, gap, reserve, 0, inner.h * 0.55);
+  const total = rows.reduce((s, r) => s + r.h, 0) + reserve * rows.length - below;
   let y = inner.y + (inner.h - total) / 2;
 
-  // Aluminum uprights the full height, like a Vitsoe 606.
   const dark = p.dark;
-  const upright = (x: number) => {
-    const g = ctx.createLinearGradient(x, 0, x + 16, 0);
-    const stops = dark ? ['#5a5a5a', '#8a8a8a', '#a0a0a0', '#6e6e6e', '#4c4c4c'] : ['#a9a9a9', '#d9d9d9', '#f4f4f4', '#cfcfcf', '#9c9c9c'];
+  const TRACK = 14;
+  const xL = box.x - 32, xR = W - box.x + 32 - TRACK;
+
+  // E-Track: satin aluminium with a column of slots.
+  const track = (x: number) => {
+    const g = ctx.createLinearGradient(x, 0, x + TRACK, 0);
+    const stops = dark
+      ? ['#4a4b4e', '#6d6f73', '#7a7c80', '#66686c', '#3e3f42']
+      : ['#b9bbbe', '#d8dadd', '#e6e7e9', '#d4d6d9', '#b3b5b8'];
     stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
     ctx.fillStyle = g;
-    ctx.fillRect(x, 0, 16, H);
-    ctx.fillStyle = dark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)';
-    for (let sy = 40; sy < H - 40; sy += 16) ctx.fillRect(x + 6, sy, 4, 7);
+    ctx.fillRect(x, 0, TRACK, H);
+    ctx.fillStyle = dark ? 'rgba(0,0,0,0.45)' : 'rgba(40,42,46,0.32)';
+    for (let sy = 16; sy < H; sy += 22) ctx.fillRect(x + TRACK / 2 - 1.5, sy, 3, 10);
   };
-  upright(box.x - 26);
-  upright(W - box.x + 10);
+  track(xL);
+  track(xR);
 
+  const sx = xL - 6, sw = xR + TRACK + 6 - sx;
   for (const row of rows) {
-    const shelfTop = y + row.h;
-    // Shelf board and front edge.
-    const bg = ctx.createLinearGradient(0, shelfTop, 0, shelfTop + board);
-    bg.addColorStop(0, dark ? '#8c7a5c' : '#e3d3b4'); bg.addColorStop(1, dark ? '#6e5d43' : '#c9b48c');
-    ctx.fillStyle = bg;
-    ctx.fillRect(box.x - 18, shelfTop, box.w + 36, board);
-    ctx.fillStyle = dark ? '#54462f' : '#a8926a';
-    ctx.fillRect(box.x - 18, shelfTop + board, box.w + 36, lip);
-    // Soft shadow under the board.
-    const sg = ctx.createLinearGradient(0, shelfTop + board + lip, 0, shelfTop + board + lip + 18);
-    sg.addColorStop(0, `rgba(0,0,0,${dark ? 0.35 : 0.12})`); sg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(box.x - 18, shelfTop + board + lip, box.w + 36, 18);
-    // Brackets.
-    ctx.fillStyle = dark ? '#7a7a7a' : '#c4c4c4';
-    ctx.fillRect(box.x - 10, shelfTop + board + lip, 12, 22);
-    ctx.fillRect(box.x + box.w - 2, shelfTop + board + lip, 12, 22);
+    const lip = Math.round(Math.min(LIP_MAX, Math.max(22, row.h * 0.08)));
+    const surface = Math.round(lip * 0.4);
+    const top = y + row.h - Math.round(surface * 0.55);
+    const face = top + surface;
+
+    // Soft shadow on the wall under the shelf.
+    ctx.save();
+    ctx.shadowColor = `rgba(0,0,0,${dark ? 0.5 : 0.2})`;
+    ctx.shadowBlur = 26;
+    ctx.shadowOffsetY = 14;
+    ctx.fillStyle = dark ? '#2c2d30' : '#e4e2dc';
+    ctx.fillRect(sx, face, sw, lip);
+    ctx.restore();
+
+    // Top surface, a touch darker toward the wall.
+    const tg = ctx.createLinearGradient(0, top, 0, face);
+    tg.addColorStop(0, dark ? '#3c3d41' : '#e9e7e2');
+    tg.addColorStop(1, dark ? '#4a4b4f' : '#f6f5f1');
+    ctx.fillStyle = tg;
+    ctx.fillRect(sx, top, sw, surface);
+
+    // Front lip: a bright folded edge, then shading down.
+    const fg = ctx.createLinearGradient(0, face, 0, face + lip);
+    if (dark) {
+      fg.addColorStop(0, '#55575b'); fg.addColorStop(0.08, '#36373a');
+      fg.addColorStop(0.6, '#2e2f32'); fg.addColorStop(1, '#202124');
+    } else {
+      fg.addColorStop(0, '#fcfbf9'); fg.addColorStop(0.08, '#ebe9e4');
+      fg.addColorStop(0.6, '#e4e2dc'); fg.addColorStop(0.95, '#d9d7d0'); fg.addColorStop(1, '#c6c4bd');
+    }
+    ctx.fillStyle = fg;
+    ctx.fillRect(sx, face, sw, lip);
 
     let x = inner.x + (inner.w - row.w) / 2;
     for (const k of row.items) {
       const w = row.h * ratio(books[k]);
-      drawCover(ctx, books[k].img, x, y, w, row.h, p, 0.7);
+      // A tight contact shadow where it stands, and a soft one on the wall
+      // behind (up and to the side, so the book doesn't float over the lip).
+      ctx.fillStyle = `rgba(0,0,0,${dark ? 0.5 : 0.22})`;
+      ctx.fillRect(x + 1, y + row.h - 1, w - 2, 3);
+      ctx.save();
+      ctx.shadowColor = `rgba(0,0,0,${dark ? 0.45 : 0.14})`;
+      ctx.shadowBlur = Math.max(12, w * 0.07);
+      ctx.shadowOffsetX = 5;
+      ctx.shadowOffsetY = -4;
+      if (books[k].img) ctx.drawImage(books[k].img!, x, y, w, row.h);
+      else { ctx.fillStyle = 'rgba(128,128,128,0.25)'; ctx.fillRect(x, y, w, row.h); }
+      ctx.restore();
       x += w + gap;
     }
-    y += row.h + rowGap;
+    y += row.h + reserve;
   }
 }
 

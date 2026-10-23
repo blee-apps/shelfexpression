@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
-import { Book, USE_VITSOE_SHELF, SHARE_FOOTER } from './books';
+import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER } from './books';
 import ShareStudio from './share/ShareStudio';
 import shelfContent from '../content/books.json';
 import { SITE } from '../content/site';
@@ -91,6 +91,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [generatedCode, setGeneratedCode] = useState('');
   const [toast, setToast] = useState('');
   const [useVitsoeShelf, setUseVitsoeShelf] = useState(USE_VITSOE_SHELF);
+  const [colorMode, setColorMode] = useState<ColorMode>(COLOR_MODE);
 
   // Publishing (live site only). `baseJson` is the books.json this editor
   // started from, so Publish can tell if GitHub changed in the meantime.
@@ -138,6 +139,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const applyMeta = (data: any) => {
     if (data && !Array.isArray(data)) {
       if (typeof data.useVitsoeShelf === 'boolean') setUseVitsoeShelf(data.useVitsoeShelf);
+      setColorMode(data.colorMode === 'dark' || data.colorMode === 'auto' ? data.colorMode : 'light');
       if (typeof data.share?.footer === 'string') setShareFooter(data.share.footer);
     }
   };
@@ -637,7 +639,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       if (book.coverUrl) entry.coverUrl = book.coverUrl;
       return entry;
     });
-    const data: Record<string, unknown> = { useVitsoeShelf, books };
+    const data: Record<string, unknown> = { useVitsoeShelf, colorMode, books };
     if (shareFooter !== undefined) data.share = { footer: shareFooter };
     return JSON.stringify(data, null, 2) + '\n';
   };
@@ -1158,6 +1160,15 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           {filledCount}/{SLOT_COUNT} slots used
         </div>
 
+        {/* LOOK: shelf style and light/dark, published with the books */}
+        <div className="admin-look" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px', alignItems: 'center', justifyContent: 'center', margin: '0 0 22px' }}>
+          <LookSwitch label="Shelf" value={useVitsoeShelf ? 'vitsoe' : 'minimal'} onChange={v => setUseVitsoeShelf(v === 'vitsoe')}
+            items={[{ value: 'minimal', label: 'Minimal' }, { value: 'vitsoe', label: 'Vitsoe' }]} />
+          <LookSwitch label="Mode" value={colorMode} onChange={v => setColorMode(v as ColorMode)}
+            items={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'auto', label: 'Auto' }]}
+            title="Auto follows each visitor's device setting" />
+        </div>
+
         {!import.meta.env.DEV && (
           <button onClick={() => setShowAdvanced(v => !v)} style={{ ...btnStyle({ secondary: true, small: true }), marginBottom: 12 }}>
             {showAdvanced ? 'Hide advanced' : 'Advanced: load or copy books.json'}
@@ -1168,10 +1179,6 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         {(import.meta.env.DEV || showAdvanced) && <div style={{ background: '#f8f8f8', border: '1px solid #eee', borderRadius: 8, padding: 16 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#666' }}>Generated Code</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', cursor: 'pointer', marginLeft: 16 }}>
-              <input type="checkbox" checked={useVitsoeShelf} onChange={e => setUseVitsoeShelf(e.target.checked)} />
-              Enable Vitsoe Bookshelf
-            </label>
             <button onClick={generateCode} style={{ ...btnStyle({ small: true }), marginLeft: 'auto' }}>&#9889; Generate</button>
             <button onClick={copyCode} style={btnStyle({ secondary: true, small: true })}><Copy size={12} /> Copy</button>
             <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
@@ -1688,6 +1695,27 @@ function BookCover({ book }: { book: Book }) {
 }
 
 // --- STYLE HELPERS ---
+// A small segmented switch for the shelf's look.
+function LookSwitch({ label, value, onChange, items, title }: { label: string; value: string; onChange: (v: string) => void; items: { value: string; label: string }[]; title?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={title}>
+      <span style={{ fontSize: '0.78rem', color: '#888' }}>{label}</span>
+      <div role="radiogroup" aria-label={label} style={{ display: 'flex', background: '#f0f0f0', borderRadius: 7, padding: 2 }}>
+        {items.map(it => (
+          <button key={it.value} type="button" role="radio" aria-checked={value === it.value} onClick={() => onChange(it.value)}
+            style={{
+              border: 'none', borderRadius: 5, padding: '5px 12px', font: 'inherit', fontSize: '0.8rem', cursor: 'pointer',
+              background: value === it.value ? '#fff' : 'transparent', color: value === it.value ? '#1a1a1a' : '#777',
+              fontWeight: value === it.value ? 600 : 400, boxShadow: value === it.value ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
+            }}>
+            {it.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const btnStyle = ({ secondary, small }: { secondary?: boolean; small?: boolean } = {}): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4,
   padding: small ? '4px 10px' : '7px 14px',

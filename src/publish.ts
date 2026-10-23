@@ -64,7 +64,7 @@ export async function fetchCover(src: string): Promise<Blob> {
 
 // --- Commit message -------------------------------------------------------
 type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string };
-type Shelf = { useVitsoeShelf: boolean; books: BookLike[]; share?: { footer?: string } };
+type Shelf = { useVitsoeShelf: boolean; colorMode?: string; books: BookLike[]; share?: { footer?: string } };
 
 const quote = (titles: string[]) => titles.map(t => `\u201c${t}\u201d`).join(', ');
 
@@ -95,6 +95,9 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (removed.length) details.splice(added.length ? 1 : 0, 0, `Removed ${quote(removed)}`);
   if (reordered) details.push('Changed the order');
   if (before.useVitsoeShelf !== after.useVitsoeShelf) details.push(after.useVitsoeShelf ? 'Turned on the Vitsoe shelf' : 'Turned off the Vitsoe shelf');
+  const modeBefore = before.colorMode || 'light', modeAfter = after.colorMode || 'light';
+  const modeChanged = modeBefore !== modeAfter;
+  if (modeChanged) details.push(`Color mode: ${modeAfter}`);
 
   const parts: string[] = [];
   if (added.length) parts.push(added.length === 1 ? `add ${quote(added)}` : `add ${added.length} books`);
@@ -102,6 +105,7 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (updated.length) parts.push(updated.length === 1 ? `update ${quote(updated)}` : `update ${updated.length} books`);
   if (reordered && !parts.length) parts.push('reorder books');
   if (!parts.length && before.useVitsoeShelf !== after.useVitsoeShelf) parts.push('change shelf style');
+  if (!parts.length && modeChanged) parts.push(`switch to ${modeAfter} mode`);
   const footerChanged = (before.share?.footer ?? '') !== (after.share?.footer ?? '');
   if (footerChanged) details.push(`Share image footer: \u201c${after.share?.footer ?? ''}\u201d`);
   if (!parts.length && footerChanged) parts.push('change share footer');
@@ -127,7 +131,7 @@ export const canonicalShelf = (json: string) => {
       if (b.coverUrl) e.coverUrl = b.coverUrl;
       return e;
     });
-    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, books, footer: d.share?.footer ?? null });
+    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, colorMode: d.colorMode || 'light', books, footer: d.share?.footer ?? null });
   } catch { return json; }
 };
 const normalize = canonicalShelf;
