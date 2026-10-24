@@ -23,7 +23,8 @@ const sendJson = (res: ServerResponse, status: number, data: unknown) => {
 
 const isImage = (body: Buffer) =>
   (body.length > 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) || // JPEG
-  (body.length > 4 && body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47); // PNG
+  (body.length > 4 && body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47) || // PNG
+  (body.length > 12 && body.toString('latin1', 0, 4) === 'RIFF' && body.toString('latin1', 8, 12) === 'WEBP'); // WebP
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
@@ -133,8 +134,16 @@ const exportPlugin = {
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
       if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
       try {
-        const { content, site } = JSON.parse(await readBody(req)) as { content: { books: unknown[] }; site: SiteDetails };
+        const { content, site, images } = JSON.parse(await readBody(req, 40 * 1024 * 1024)) as { content: { books: unknown[] }; site: SiteDetails; images?: { path: string; data: string }[] };
         if (!content || !Array.isArray(content.books)) throw new Error('No books to save');
+        // New images the shelf uses that are still only in the editor (your own
+        // decorations, say) go into content/covers first.
+        for (const img of images ?? []) {
+          const name = String(img?.path || '').match(/^\/covers\/([a-zA-Z0-9_-]+\.(?:jpg|jpeg|png|webp))$/)?.[1];
+          const body = Buffer.from(String(img?.data || ''), 'base64');
+          if (!name || !isImage(body)) throw new Error(`Not an image: ${img?.path}`);
+          if (!existsSync(`${COVERS_DIR}/${name}`)) await writeFile(`${COVERS_DIR}/${name}`, body);
+        }
         await quietWrite('content/books.json', JSON.stringify(content, null, 2) + '\n');
         let siteSaved = false;
         if (site) {
@@ -188,7 +197,7 @@ const detectCommit = (): string => {
 };
 
 export default defineConfig({
-  define: { __SHELF_REPO__: JSON.stringify(detectRepo()) },
+  define: { __SHELF_REPO__: JSON.stringify(detectRepo()), __SHELF_COMMIT__: JSON.stringify(detectCommit()) },
   plugins: [react(), coversPlugin, siteFilesPlugin, exportPlugin, {
     name: 'cover-upload',
     configureServer(server) {

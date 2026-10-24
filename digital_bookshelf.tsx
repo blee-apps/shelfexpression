@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, USE_VITSOE_SHELF, COLOR_MODE } from './src/books';
+import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, isDecor } from './src/books';
+import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
 
 const AdminGate = lazy(() => import('./src/AdminGate'));
@@ -301,10 +302,12 @@ const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>, animState
         const rowTop = r.top - containerTop;
         const rowBottom = r.bottom - containerTop;
 
-        // Find an existing row within tolerance, otherwise start a new one
-        const existing = seen.find(s => Math.abs(s.top - rowTop) < ROW_TOLERANCE);
+        // Find an existing row within tolerance, otherwise start a new one.
+        // Everything in a row stands on the same line (shorter decorations
+        // too), so rows are matched by their bottom edge.
+        const existing = seen.find(s => Math.abs(s.bottom - rowBottom) < ROW_TOLERANCE);
         if (existing) {
-          existing.bottom = Math.max(existing.bottom, rowBottom);
+          existing.top = Math.min(existing.top, rowTop);
         } else {
           seen.push({ top: rowTop, bottom: rowBottom });
         }
@@ -364,6 +367,60 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
       ))}
     </div>
   );
+};
+
+// --- DECORATIONS ---
+// A decoration stands in a slot like a book, at its true size next to a
+// paperback, bottom-aligned on the shelf. It's just there: no hover, no click.
+// Its slot is always as tall as a paperback, so a row with only decorations
+// in it keeps the standard shelf height.
+const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
+  def: DecorDef; height: number; slotHeight: number; slotStyle: React.CSSProperties;
+}) => (
+  <div className="decor-slot" aria-hidden="true" style={{ ...slotStyle, height: Math.max(height, slotHeight) }}>
+    {height > 0 && (
+      <div className="decor-item" style={{ width: height * def.aspect, height }}>
+        <div className="decor-contact" style={{ left: `${def.base[0] * 100}%`, right: `${(1 - def.base[1]) * 100}%` }} />
+        <img src={def.src} alt="" draggable={false} className="decor-img" />
+      </div>
+    )}
+  </div>
+);
+
+// A book's place on the Vitsoe shelf. Every slot is as tall as a paperback at
+// the slot's width, so all rows are the same height whatever the covers are.
+// The book fits inside it by its own shape (like object-fit: contain) and stands
+// on the shelf, centered: a wide cover fills the width and is shorter, a tall
+// narrow one fills the height and is narrower. The button is the cover's own
+// size, so the hover area and the rect the open animation starts from are the
+// cover, not the empty space above it.
+const ShelfSlot = ({ book, children }: { book: Book; children: (coverWidth: string) => React.ReactNode }) => {
+  const aspect = useBookAspectRatio(book);
+  const fit = Math.min(1, aspect / BOOK_ASPECT);
+  return (
+    <div className="vitsoe-slot" style={{ aspectRatio: BOOK_ASPECT }}>
+      {children(`${(fit * 100).toFixed(3)}%`)}
+    </div>
+  );
+};
+
+// The width of one slot in the books grid, and how many slots fit across.
+const useSlotSize = (gridRef: React.RefObject<HTMLDivElement | null>) => {
+  const [size, setSize] = useState({ w: 0, cols: 0 });
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const measure = () => {
+      const tracks = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean);
+      const w = parseFloat(tracks[0]) || 0;
+      setSize(prev => (Math.abs(prev.w - w) < 0.5 && prev.cols === tracks.length ? prev : { w, cols: tracks.length }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [gridRef]);
+  return size;
 };
 
 type Pose = { x: number; y: number; rot: number; scale: number };
@@ -429,6 +486,7 @@ export default function App() {
   const titleTapRef = useRef({ count: 0, timer: null as ReturnType<typeof setTimeout> | null });
   const navExitRectRef = useRef<DOMRect | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const slot = useSlotSize(gridRef);
   const hoverTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // Accessibility: the book buttons (to return focus on close), the close
   // button (to move focus into the book view), and the page behind the view.
@@ -894,6 +952,29 @@ export default function App() {
     ? `transform ${MOTION.navMs}ms ${MOTION.move}, opacity 0.08s ease-out`
     : `transform ${animState === 'closing' ? MOTION.closeMs : MOTION.openMs}ms ${MOTION.move}, opacity 0.08s ease-out`;
 
+  // Where each decoration goes. One wider than a slot takes two,
+  // kept within one bay of the shelf so it never straddles the middle track.
+  // Decorations only stand on the Vitsoe shelf.
+  const decorEls: Record<string, React.ReactNode> = {};
+  if (USE_VITSOE_SHELF) {
+    const cols = slot.cols || 1;
+    let col = 0;
+    for (const item of SHELF_ITEMS) {
+      const def = isDecor(item) ? decorDefOf(item) : undefined;
+      if (isDecor(item) && !def) continue;
+      const height = def ? (slot.w / BOOK_ASPECT) * def.height : 0;
+      const span = def && slot.w > 0 && height * def.aspect > slot.w && cols >= 2 ? 2 : 1;
+      const style: React.CSSProperties = {};
+      if (span === 2) {
+        if (col + 2 > cols) col = 0;
+        if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
+        else style.gridColumn = 'span 2';
+      }
+      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={slot.w / BOOK_ASPECT} slotStyle={style} />;
+      col = (col + span) % cols;
+    }
+  }
+
   return (
     <div
       ref={scrollerRef}
@@ -915,6 +996,12 @@ export default function App() {
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
         /* Book hover effect — simulates picking a book off the shelf */
+        .vitsoe-slot {
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          width: 100%;
+        }
         .vitsoe-book-wrapper {
           position: relative;
         }
@@ -933,6 +1020,24 @@ export default function App() {
           filter: blur(18px);
           will-change: translate, rotate, scale, opacity;
         }
+
+        /* Decorations: bottom-aligned in their slot, standing on the shelf */
+        .decor-slot { display: flex; justify-content: center; align-items: flex-end; min-width: 0; }
+        .decor-item { position: relative; flex-shrink: 0; }
+        .decor-img {
+          position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+          -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+          /* A soft shadow on the wall behind, like the books' */
+          filter: drop-shadow(3px -2px 8px rgba(0,0,0,0.10));
+          pointer-events: none;
+        }
+        /* A tight, soft shadow where it touches the shelf */
+        .decor-contact {
+          position: absolute; bottom: -3px; height: 8px; border-radius: 50%; pointer-events: none;
+          background: radial-gradient(ellipse at center, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 72%);
+        }
+        .dark .decor-img { filter: drop-shadow(3px -2px 8px rgba(0,0,0,0.35)); }
+        .dark .decor-contact { background: radial-gradient(ellipse at center, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.25) 45%, rgba(0,0,0,0) 72%); }
 
         .book3d { will-change: transform; }
         .flyer-cover { box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
@@ -1133,15 +1238,17 @@ export default function App() {
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
           <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
-            {BOOKS.map((book) => {
+            {SHELF_ITEMS.map((book) => {
+              if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
+                <ShelfSlot key={book.id} book={book}>{coverWidth => (
                 <button
                   type="button"
-                  key={book.id}
                   ref={el => { bookButtonRefs.current[book.id] = el; }}
                   aria-label={`${book.title} by ${book.author}`}
-                  className="vitsoe-book-wrapper block w-full p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100"
+                  style={{ width: coverWidth }}
+                  className="vitsoe-book-wrapper block shrink-0 p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100"
                   onClick={(e) => handleSelect(book, e)}
                   onPointerEnter={(e) => {
                     // Lift for a mouse or trackpad (or pen), not for a finger: on phones a tap would leave it stuck.
@@ -1182,6 +1289,7 @@ export default function App() {
                     <DynamicCover book={book} />
                   </div>
                 </button>
+                )}</ShelfSlot>
               ) : (
                 <button
                   type="button"
@@ -1340,7 +1448,7 @@ export default function App() {
         </div>
       )}
       <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center text-white text-xl">Loading admin…</div>}>
-        {showAdmin && <AdminGate books={BOOKS} onClose={() => setShowAdmin(false)} />}
+        {showAdmin && <AdminGate books={SHELF_ITEMS} onClose={() => setShowAdmin(false)} />}
       </Suspense>
     </div>
   );

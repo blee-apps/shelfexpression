@@ -3,6 +3,7 @@
 import { SITE } from './shelfData';
 import { githubHeaders } from './github';
 import { updateSiteFile, SiteDetails } from '../server/siteFile';
+import { customDecor } from './decor';
 
 // --- Covers waiting to be published -------------------------------------
 // A cover picked or uploaded in the editor lives in the browser until you
@@ -43,10 +44,11 @@ export async function resizeCover(blob: Blob): Promise<Blob> {
 }
 
 // Adds a cover to the waiting list and returns its site path. Every new cover
-// gets a new file name, so browsers never show an old cached image.
-export function addPendingCover(key: string, blob: Blob): string {
+// gets a new file name, so browsers never show an old cached image. Your own
+// decorations wait here too (as .png or .webp, to keep their transparency).
+export function addPendingCover(key: string, blob: Blob, ext: 'jpg' | 'png' | 'webp' = 'jpg'): string {
   const safe = (key || 'cover').replace(/[^a-zA-Z0-9_-]/g, '') || 'cover';
-  const path = `/covers/${safe}-${Date.now().toString(36)}.jpg`;
+  const path = `/covers/${safe}-${Date.now().toString(36)}.${ext}`;
   pendingCovers.set(path, { blob, preview: URL.createObjectURL(blob) });
   return path;
 }
@@ -73,21 +75,30 @@ export async function fetchCover(src: string): Promise<Blob> {
 }
 
 // --- Commit message -------------------------------------------------------
-type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string };
+type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string; type?: string; decor?: string; label?: string; src?: string; height?: number };
 type Shelf = { useVitsoeShelf: boolean; colorMode?: string; books: BookLike[]; share?: { footer?: string } };
 
 const quote = (titles: string[]) => titles.map(t => `\u201c${t}\u201d`).join(', ');
 
 // Describes what changed between two versions of the shelf, in plain words.
 export function describeChanges(before: Shelf, after: Shelf): { summary: string; details: string[] } {
-  const keyOf = (b: BookLike) => `${b.title.toLowerCase()}|${b.author.toLowerCase()}`;
+  const isDecorItem = (b: BookLike) => b.type === 'decor';
+  const keyOf = (b: BookLike) => isDecorItem(b) ? `decor:${b.decor || ''}` : `${(b.title || '').toLowerCase()}|${(b.author || '').toLowerCase()}`;
   const old = new Map(before.books.map(b => [keyOf(b), b]));
   const now = new Map(after.books.map(b => [keyOf(b), b]));
-  const added = after.books.filter(b => !old.has(keyOf(b))).map(b => b.title);
-  const removed = before.books.filter(b => !now.has(keyOf(b))).map(b => b.title);
+  const added = after.books.filter(b => !isDecorItem(b) && !old.has(keyOf(b))).map(b => b.title);
+  const removed = before.books.filter(b => !isDecorItem(b) && !now.has(keyOf(b))).map(b => b.title);
   const updated: string[] = [];
   const details: string[] = [];
+  // Decorations: which ones are on the shelf, compared as a list.
+  // Your own ones are listed by their label.
+  const decorName = (b: BookLike) => { const c = customDecor(b); return c ? `${c.label} (your own)` : b.decor || ''; };
+  const decorList = (s: Shelf) => s.books.filter(isDecorItem).map(decorName).sort().join(', ');
+  const decorLook = (s: Shelf) => s.books.filter(isDecorItem).map(b => { const c = customDecor(b); return c ? `${c.src}|${c.height}` : ''; }).sort().join(',');
+  const decorChanged = decorList(before) !== decorList(after) || decorLook(before) !== decorLook(after);
+  if (decorChanged) details.push(`Decorations: ${decorList(after) || 'none'}`);
   for (const b of after.books) {
+    if (isDecorItem(b)) continue;
     const o = old.get(keyOf(b));
     if (!o) continue;
     const changed = (['isbn', 'year', 'synopsis', 'gr', 'coverUrl'] as const).filter(k => (o[k] ?? '') !== (b[k] ?? ''));
@@ -113,6 +124,7 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (added.length) parts.push(added.length === 1 ? `add ${quote(added)}` : `add ${added.length} books`);
   if (removed.length) parts.push(removed.length === 1 ? `remove ${quote(removed)}` : `remove ${removed.length} books`);
   if (updated.length) parts.push(updated.length === 1 ? `update ${quote(updated)}` : `update ${updated.length} books`);
+  if (decorChanged) parts.push('change decorations');
   if (reordered && !parts.length) parts.push('reorder books');
   if (!parts.length && before.useVitsoeShelf !== after.useVitsoeShelf) parts.push('change shelf style');
   if (!parts.length && modeChanged) parts.push(`switch to ${modeAfter} mode`);
@@ -134,6 +146,10 @@ export const canonicalShelf = (json: string) => {
   try {
     const d = JSON.parse(json);
     const books = (d.books || []).map((b: any, i: number) => {
+      if (b?.type === 'decor') {
+        const c = customDecor(b);
+        return c ? { id: String(i + 1), type: 'decor', decor: 'custom', ...c } : { id: String(i + 1), type: 'decor', decor: b.decor || '' };
+      }
       const e: Record<string, unknown> = {
         id: String(i + 1), isbn: b.isbn || '', title: b.title || '', author: b.author || '',
         year: Number(b.year) || 0, synopsis: b.synopsis || '', gr: b.gr || '',
@@ -158,6 +174,29 @@ const fromBase64Utf8 = (b64: string) => new TextDecoder().decode(Uint8Array.from
 const COVER_FILE = /^content\/covers\/[^/]+\.(jpg|jpeg|png|webp)$/i;
 
 export type PublishResult = { commit: string; url: string; branch: string; added: number; deleted: number };
+
+// The commit this copy of the site was built from ('' when unknown).
+const BUILD_COMMIT: string = typeof __SHELF_COMMIT__ === 'string' ? __SHELF_COMMIT__ : '';
+
+// Which commit a publish builds on. Normally the live branch. But when this
+// editor is running from a version that isn't on the live branch yet (a pull
+// request preview, say), a Test preview builds on that version instead, so
+// the preview has the code that understands the new shelf. Publishing live
+// from such a version is refused: the live code might not understand it.
+async function publishBase(
+  gh: (path: string) => Promise<Response>, liveHead: string, toTest: boolean,
+): Promise<string> {
+  if (!BUILD_COMMIT || BUILD_COMMIT === liveHead) return liveHead;
+  const { branch: liveBranch } = SITE.github;
+  const r = await gh(`compare/${liveHead}...${BUILD_COMMIT}`);
+  if (!r.ok) return liveHead; // can't tell (e.g. a local build that was never pushed)
+  const { status } = await r.json() as { status?: string };
+  if (status === 'behind' || status === 'identical') return liveHead;
+  if (!toTest) {
+    throw new PublishError(`This editor is from a version that isn't on ${liveBranch} yet, so publishing live could break the site. Use Test preview, or merge the new version first.`);
+  }
+  return BUILD_COMMIT;
+}
 
 // Makes one commit with the new books.json, the new cover files, and with
 // covers no book uses any more removed. `baseJson` is the books.json the
@@ -194,13 +233,20 @@ export async function publish(opts: {
   // 1. Where the live branch is now.
   onStep('Checking GitHub…');
   const ref = await ok(await gh(`git/ref/heads/${liveBranch}`), 'read the live branch');
-  const parent: string = ref.object.sha;
+  const liveHead: string = ref.object.sha;
+  const parent = await publishBase(gh, liveHead, toTest);
   const parentCommit = await ok(await gh(`git/commits/${parent}`), 'read the latest commit');
   const tree = await ok(await gh(`git/trees/${parentCommit.tree.sha}?recursive=1`), 'read the files');
   const files: { path: string; sha: string; type: string }[] = tree.tree;
 
-  // 2. Stop if the shelf changed since the editor loaded it.
-  const booksFile = files.find(f => f.path === 'content/books.json');
+  // 2. Stop if the shelf changed since the editor loaded it (the editor
+  // loads it from the live branch).
+  let liveFiles = files;
+  if (parent !== liveHead) {
+    const liveCommit = await ok(await gh(`git/commits/${liveHead}`), 'read the latest commit');
+    liveFiles = (await ok(await gh(`git/trees/${liveCommit.tree.sha}?recursive=1`), 'read the files')).tree;
+  }
+  const booksFile = liveFiles.find(f => f.path === 'content/books.json');
   if (booksFile) {
     const blob = await ok(await gh(`git/blobs/${booksFile.sha}`), 'read books.json');
     if (normalize(fromBase64Utf8(blob.content)) !== normalize(baseJson)) {
@@ -212,6 +258,12 @@ export async function publish(opts: {
   const shelf = JSON.parse(json) as Shelf & { books: (BookLike & { id: string })[] };
   const used = new Set<string>();
   for (const b of shelf.books) {
+    if (b.type === 'decor') {
+      // Built-in decorations come with the site; your own has its image in covers/.
+      const own = customDecor(b)?.src.match(/^\/covers\/([^/?#]+)$/)?.[1];
+      if (own) used.add(`content/covers/${own}`);
+      continue;
+    }
     const local = b.coverUrl?.match(/^\/covers\/([^/?#]+)$/)?.[1];
     used.add(`content/covers/${local || `${b.isbn || b.id}.jpg`}`);
   }
@@ -268,7 +320,7 @@ export async function publishSiteDetails(opts: { token: string; site: SiteDetail
     return r;
   };
   const ref = await (await gh(`git/ref/heads/${liveBranch}`, undefined, 'read the live branch')).json();
-  const parent: string = ref.object.sha;
+  const parent = await publishBase(p => gh(p, undefined, 'compare versions').catch(() => new Response(null, { status: 500 })), ref.object.sha, toTest);
   const parentCommit = await (await gh(`git/commits/${parent}`, undefined, 'read the latest commit')).json();
   const file = await (await gh(`contents/content/site.ts?ref=${parent}`, undefined, 'read content/site.ts')).json();
   const next = updateSiteFile(fromBase64Utf8(file.content), site);

@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine } from 'lucide-react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
-import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER } from './books';
+import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
+import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
+import { prepareDecorImage } from './decorUpload';
 import ShareStudio from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
@@ -24,6 +26,20 @@ interface Props {
 const SLOT_COUNT = 48;
 // editingIndex value for a brand-new book, which goes in at the top.
 const NEW_BOOK = -2;
+
+// Your own decoration while you set it up (see CustomDecorSheet).
+type CustomDraft = {
+  at: number; label: string; height: number; aspect: number; base: [number, number];
+  preview: string; transparent: boolean;
+  src?: string; blob?: Blob; ext?: 'png' | 'webp';
+};
+
+const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(blob);
+});
 // Keeps books together at the start, with the empty slots after them.
 const compact = (list: (Book | null)[]) => {
   const filled = list.filter((b): b is Book => b !== null).slice(0, SLOT_COUNT);
@@ -126,6 +142,13 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [studioOpen, setStudioOpen] = useState(false);
   const [staticOpen, setStaticOpen] = useState(false);
   const [siteOpen, setSiteOpen] = useState(false);
+  // Decoration picker: adding a new one (NEW_BOOK) or changing the one in a slot.
+  const [decorPickFor, setDecorPickFor] = useState(-1);
+  // Your own decoration being added (at NEW_BOOK) or changed (at a slot).
+  // `blob` is a newly picked image; without one it keeps `src`.
+  const [customDraft, setCustomDraft] = useState<CustomDraft | null>(null);
+  const [decorBusy, setDecorBusy] = useState(false);
+  const decorFileRef = useRef<HTMLInputElement>(null);
   // Footer line on share images. Starts as the site address, then remembers
   // what you type (on this device right away, and in books.json on publish).
   const [shareFooter, setShareFooter] = useState<string | undefined>(() => {
@@ -180,6 +203,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   }, []);
 
   const filledCount = slots.filter(b => b !== null).length;
+  // Books only, without decorations (for the {count} in the subtitle).
+  const bookCount = slots.filter(b => b !== null && !isDecor(b)).length;
+  const hasDecor = slots.some(b => isDecor(b));
 
   // --- PARSER ---
   const parseRAWBOOKS = (text: string): Book[] => {
@@ -259,7 +285,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         const data = JSON.parse(trimmed);
         const list = Array.isArray(data) ? data : data.books;
         if (!Array.isArray(list)) throw new Error('No "books" list found in the JSON.');
-        fillSlots(list.map((b: any) => ({
+        fillSlots(list.map((b: any) => b?.type === 'decor' ? decorFromRaw(b) : ({
           id: String(b.id ?? ''), isbn: String(b.isbn ?? ''), title: String(b.title ?? ''), author: String(b.author ?? ''),
           year: Number(b.year) || 0, synopsis: String(b.synopsis ?? ''), gr: String(b.gr ?? ''), mult: 1.0,
           coverUrl: b.coverUrl || undefined, coverLocked: b.coverLocked === true || undefined,
@@ -312,6 +338,63 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     showToast(`Removed slot #${index + 1}.`);
   };
 
+  // Adds a decoration at the top (like a new book), or swaps the one in a slot.
+  const pickDecor = (decor: string) => {
+    const label = decorById(decor)?.label ?? 'Decoration';
+    if (decorPickFor === NEW_BOOK) {
+      if (filledCount >= SLOT_COUNT) { showToast(`The shelf is full (${SLOT_COUNT} slots). Remove something first.`); return; }
+      setSlots(prev => compact([decorBook(`decor-${Date.now().toString(36)}`, decor), ...prev]));
+      showToast(`Added the ${label.toLowerCase()} at the top. Drag it where you want it.`);
+    } else if (decorPickFor >= 0) {
+      const at = decorPickFor;
+      setSlots(prev => prev.map((b, i) => i === at && b ? decorBook(b.id, decor) : b));
+      showToast(`Changed slot #${at + 1} to the ${label.toLowerCase()}.`);
+    }
+    setDecorPickFor(-1);
+  };
+
+  // Your own decoration: tidies up the picked image and opens the sheet to
+  // set its size, or swaps the image in the sheet that's already open.
+  const pickDecorFile = async (file: File) => {
+    setDecorBusy(true);
+    try {
+      const img = await prepareDecorImage(file);
+      const at = customDraft ? customDraft.at : decorPickFor;
+      setCustomDraft(prev => prev
+        ? { ...prev, src: undefined, blob: img.blob, ext: img.ext, preview: img.preview, aspect: img.aspect, base: img.base, transparent: img.transparent }
+        : { at, label: CUSTOM_LABEL, height: CUSTOM_HEIGHT.default, blob: img.blob, ext: img.ext, preview: img.preview, aspect: img.aspect, base: img.base, transparent: img.transparent });
+      setDecorPickFor(-1);
+    } catch (err: any) {
+      showToast(`Couldn\u2019t use that image: ${err.message}.`);
+    }
+    setDecorBusy(false);
+  };
+
+  // Tapping your own decoration in the list: change its size, label or image.
+  const openCustomDecor = (i: number) => {
+    const c = customDecor(slots[i]);
+    if (!c) { setDecorPickFor(i); return; }
+    setCustomDraft({ at: i, label: c.label, height: c.height, src: c.src, preview: coverSrc(c.src), aspect: c.aspect, base: c.base, transparent: true });
+  };
+
+  const saveCustomDecor = () => {
+    const d = customDraft;
+    if (!d) return;
+    if (d.at === NEW_BOOK && filledCount >= SLOT_COUNT) { showToast(`The shelf is full (${SLOT_COUNT} slots). Remove something first.`); return; }
+    const src = d.blob ? addPendingCover('decor', d.blob, d.ext) : d.src;
+    const custom = customDecor({ decor: CUSTOM_DECOR, src, label: d.label, height: d.height, aspect: d.aspect, base: d.base });
+    if (!custom) { showToast('Couldn\u2019t use that image.'); return; }
+    if (d.at === NEW_BOOK) {
+      setSlots(prev => compact([decorBook(`decor-${Date.now().toString(36)}`, CUSTOM_DECOR, custom), ...prev]));
+      showToast(`Added \u201c${custom.label}\u201d at the top. Drag it where you want it.`);
+    } else {
+      const at = d.at;
+      setSlots(prev => prev.map((b, i) => i === at && b ? decorBook(b.id, CUSTOM_DECOR, custom) : b));
+      showToast(`Updated \u201c${custom.label}\u201d.`);
+    }
+    setCustomDraft(null);
+  };
+
   const moveBook = (from: number, to: number) => {
     if (from === to) return;
     setSlots(prev => {
@@ -337,6 +420,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 
   // The best available image of a book's cover, for the share studio.
   const loadCover = async (book: Book): Promise<HTMLImageElement | null> => {
+    if (isDecor(book)) {
+      const def = decorDefOf(book);
+      if (!def) return null;
+      try { return await loadImg(coverSrc(def.src)); } catch { return null; }
+    }
     const cached = coverCache.get(book.id);
     if (cached) { try { return await loadImg(cached); } catch {} }
     if (book.coverUrl) { try { return await loadImg(coverSrc(book.coverUrl)); } catch {} }
@@ -634,6 +722,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const buildJson = () => {
     const filled = slots.filter((b): b is Book => b !== null);
     const books = filled.map((book, i) => {
+      if (isDecor(book)) return decorEntry(String(i + 1), book);
       const entry: Record<string, unknown> = {
         id: String(i + 1), isbn: book.isbn || '', title: book.title || '', author: book.author || '',
         year: Number(book.year) || 0, synopsis: book.synopsis || '', gr: book.gr || '',
@@ -666,7 +755,12 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const saveLocal = async () => {
     setSavingShelf(true);
     try {
-      const r = await fetch('/api/save-shelf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: JSON.parse(currentJson) }) });
+      // New images the shelf uses that are only in the editor so far (your
+      // own decorations) are saved into content/covers too.
+      const images = await Promise.all([...pendingCovers.entries()]
+        .filter(([path]) => currentJson.includes(`"${path}"`))
+        .map(async ([path, { blob }]) => ({ path, data: await blobToBase64(blob) })));
+      const r = await fetch('/api/save-shelf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: JSON.parse(currentJson), images }) });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
       setBaseJson(currentJson);
@@ -678,8 +772,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   };
 
   const validate = (): string | null => {
-    const filled = slots.filter((b): b is Book => b !== null);
-    if (!filled.length) return 'The shelf is empty.';
+    const filled = slots.filter((b): b is Book => b !== null && !isDecor(b));
+    if (!filled.length) return 'The shelf has no books.';
     const missing = filled.find(b => !b.title.trim() || !b.author.trim());
     if (missing) return `A book is missing its ${missing.title.trim() ? 'author' : 'title'}.`;
     const web = filled.find(b => b.coverUrl && /^https?:/.test(b.coverUrl));
@@ -734,8 +828,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       if (latest && !sameJson(latest, baseJson)) {
         try {
           const shown = new Set(Object.values(coverManifest).map(m => (m as { path: string | null }).path));
-          const missing = (JSON.parse(latest).books as { coverUrl?: string }[])
-            .map(b => b.coverUrl || '')
+          const missing = (JSON.parse(latest).books as { coverUrl?: string; type?: string; src?: string }[])
+            .map(b => b.coverUrl || (b.type === 'decor' && customDecor(b)?.src) || '')
             .filter(u => /^\/covers\/[^/]+$/.test(u) && !shown.has(u) && !pendingCovers.has(u));
           await Promise.all(missing.map(u => fetchPublishedCover(token, u)));
           loadFromPaste(latest, true);
@@ -1070,11 +1164,17 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               style={{ ...btnStyle({ small: false }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
               <Plus size={15} /> Add book
             </button>
+            <button onClick={() => setDecorPickFor(NEW_BOOK)} disabled={filledCount >= SLOT_COUNT} className="admin-add-decor"
+              title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} slots). Remove one first.` : 'Add a cactus, a camera or another little thing to the shelf'}
+              style={{ ...btnStyle({ secondary: true }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
+              <Flower2 size={15} /> Add decoration
+            </button>
             <span style={{ fontSize: '0.75rem', color: '#999' }}>
-              {filledCount >= SLOT_COUNT ? 'The shelf is full. Remove a book to add another.' : 'New books go in at the top.'}
+              {filledCount >= SLOT_COUNT ? 'The shelf is full. Remove something to add another.' : 'New ones go in at the top.'}
             </span>
           </div>
         )}
+        {!shareMode && hasDecor && !useVitsoeShelf && <MinimalDecorWarning />}
 
         {(import.meta.env.DEV || showAdvanced) && !shareMode && <>
         {/* LOAD SECTION */}
@@ -1153,6 +1253,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               }}
               onClick={() => {
                 if (shareMode && book) { toggleShareSelection(i); return; }
+                // Tapping a decoration lets you swap it for another one, or
+                // change the size, label or image of your own.
+                if (isDecor(book)) { if (book.decor === CUSTOM_DECOR) openCustomDecor(i); else setDecorPickFor(i); return; }
                 // Tapping a book opens it for editing.
                 openEdit(i);
               }}
@@ -1174,6 +1277,18 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                       <GripVertical size={12} style={{ verticalAlign: 'middle', marginRight: 2 }} />#{i + 1}
                     </div>
                   )}
+                  {isDecor(book) ? (
+                    <>
+                      <DecorThumb def={decorDefOf(book)} />
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.3, overflowWrap: 'break-word' }}>{decorDefOf(book)?.label ?? 'Unknown decoration'}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#888' }}>{book.decor === CUSTOM_DECOR ? 'Your decoration' : 'Decoration'}</div>
+                      {!shareMode && (
+                        <div style={{ display: 'flex', gap: 5, marginTop: 'auto', paddingTop: 4 }}>
+                          <button onClick={(e) => { e.stopPropagation(); const label = decorDefOf(book)?.label ?? 'decoration'; if (confirmRemove(book.decor === CUSTOM_DECOR ? label : label.toLowerCase())) removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
+                        </div>
+                      )}
+                    </>
+                  ) : (<>
                   <div style={{
                     width: '100%', aspectRatio: aspectRatioCache.get(book.id) || 2/3, background: '#f0f0f0', borderRadius: 4,
                     overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1193,6 +1308,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                       <button onClick={(e) => { e.stopPropagation(); if (confirmRemove(book.title)) removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
                     </div>
                   )}
+                  </>)}
                 </>
               ) : (
                 <span onClick={() => openEdit(i)} style={{ cursor: 'pointer' }}>+ Empty slot #{i + 1}</span>
@@ -1215,6 +1331,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             items={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'auto', label: 'Auto' }]}
             title="Auto follows each visitor's device setting" />
         </div>
+        {hasDecor && !useVitsoeShelf && <div style={{ margin: '-10px auto 22px', maxWidth: 520 }}><MinimalDecorWarning /></div>}
 
         {!import.meta.env.DEV && (
           <button onClick={() => setShowAdvanced(v => !v)} style={{ ...btnStyle({ secondary: true, small: true }), marginBottom: 12 }}>
@@ -1274,7 +1391,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       {/* SHARE STUDIO */}
       {studioOpen && (
         <ShareStudio
-          books={[...selectedForShare].map(i => slots[i]).filter((b): b is Book => b !== null)}
+          books={[...selectedForShare].map(i => slots[i]).filter((b): b is Book => b !== null && (!isDecor(b) || !!decorDefOf(b)))}
           loadCover={loadCover}
           footer={footerText}
           onFooterChange={changeFooter}
@@ -1288,13 +1405,75 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       )}
 
       {siteOpen && (
-        <SiteDetailsPanel bookCount={filledCount} onClose={() => setSiteOpen(false)} toTest={publishToTest}
+        <SiteDetailsPanel bookCount={bookCount} onClose={() => setSiteOpen(false)} toTest={publishToTest}
           target={import.meta.env.DEV ? 'local' : guest || IS_STATIC_SITE ? 'device' : 'github'} />
       )}
 
       {staticOpen && (
-        <StaticSitePanel bookCount={filledCount} onClose={() => setStaticOpen(false)}
+        <StaticSitePanel bookCount={bookCount} onClose={() => setStaticOpen(false)}
           getContent={() => JSON.parse(buildJson())} />
+      )}
+
+      {/* DECORATION PICKER */}
+      {decorPickFor !== -1 && (
+        <div className="admin-modal-wrap admin-decor-wrap" style={{
+          position: 'fixed', inset: 0, zIndex: 10000,
+          background: 'rgba(0,0,0,0.35)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => setDecorPickFor(-1)}>
+          <div className="admin-modal admin-decor-picker" role="dialog" aria-label="Choose a decoration" style={{
+            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 560,
+            maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{decorPickFor === NEW_BOOK ? 'Add a decoration' : `Change decoration #${decorPickFor + 1}`}</span>
+              <button onClick={() => setDecorPickFor(-1)} aria-label="Close" style={btnStyle({ secondary: true, small: true })}><X size={14} /></button>
+            </div>
+            <div style={{ padding: '14px 18px 18px', overflow: 'auto' }}>
+              <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: 12, lineHeight: 1.45 }}>
+                It stands in a slot like a book, at its real size next to a paperback. {decorPickFor === NEW_BOOK ? 'It goes in at the top; drag it where you want it.' : ''}
+              </div>
+              {!useVitsoeShelf && <div style={{ marginBottom: 12 }}><MinimalDecorWarning /></div>}
+              <div className="admin-decor-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 10 }}>
+                {DECOR_CATALOGUE.map(d => {
+                  const current = decorPickFor >= 0 && decorById(slots[decorPickFor]?.decor)?.id === d.id;
+                  return (
+                    <button key={d.id} onClick={() => pickDecor(d.id)} className="admin-result"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 8, minHeight: 0,
+                        background: '#fff', border: current ? '2px solid #1a1a1a' : '1px solid #eee', borderRadius: 8, cursor: 'pointer', font: 'inherit', color: '#1a1a1a' }}>
+                      <DecorThumb def={d} />
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600, textAlign: 'center' }}>{d.label}</span>
+                    </button>
+                  );
+                })}
+                {/* Your own: a transparent PNG or WebP */}
+                <button onClick={() => decorFileRef.current?.click()} disabled={decorBusy} className="admin-result admin-decor-upload"
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 8, minHeight: 0,
+                    background: '#fff', border: '1px dashed #ccc', borderRadius: 8, cursor: decorBusy ? 'progress' : 'pointer', font: 'inherit', color: '#1a1a1a' }}>
+                  <div style={{ width: '100%', aspectRatio: 2 / 3, borderRadius: 4, background: '#fafaf8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#888' }}>
+                    {decorBusy ? <span className="admin-spinner" /> : <ImagePlus size={22} strokeWidth={1.6} />}
+                    <span style={{ fontSize: '0.66rem', lineHeight: 1.3, textAlign: 'center', padding: '0 6px' }}>Transparent PNG</span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, textAlign: 'center' }}>Upload your own</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input ref={decorFileRef} type="file" accept="image/png,image/webp" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickDecorFile(f); }} />
+
+      {/* YOUR OWN DECORATION */}
+      {customDraft && (
+        <CustomDecorSheet draft={customDraft} busy={decorBusy}
+          onChange={patch => setCustomDraft(prev => prev && { ...prev, ...patch })}
+          onReplace={() => decorFileRef.current?.click()}
+          onBuiltIn={customDraft.at >= 0 ? () => { const at = customDraft.at; setCustomDraft(null); setDecorPickFor(at); } : undefined}
+          onSave={saveCustomDecor}
+          onClose={() => setCustomDraft(null)} />
       )}
 
       {/* EDIT MODAL */}
@@ -1605,6 +1784,142 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 }
 
 // --- SUB-COMPONENT ---
+// A decoration in the editor: shown at its real size against a paperback-shaped
+// box, standing on the bottom edge, so you can see how big it will look.
+function DecorThumb({ def }: { def?: DecorDef }) {
+  return (
+    <div style={{
+      width: '100%', aspectRatio: 2 / 3, background: 'linear-gradient(#f6f5f2, #efede8)', borderRadius: 4,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden', position: 'relative',
+    }}>
+      {def ? (
+        <img src={coverSrc(def.src)} alt="" draggable={false} style={{ height: `${def.height * 100}%`, maxWidth: '100%', objectFit: 'contain', objectPosition: 'bottom', display: 'block', pointerEvents: 'none' }} />
+      ) : (
+        <span style={{ alignSelf: 'center', fontSize: '0.7rem', color: '#aaa' }}>Not available</span>
+      )}
+      <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: 'rgba(0,0,0,0.06)' }} />
+    </div>
+  );
+}
+
+// Your own decoration: its size next to a paperback, its label, and its image.
+// The preview stands both on a shelf at the size they'll be on the site.
+function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave, onClose }: {
+  draft: CustomDraft; busy: boolean;
+  onChange: (patch: Partial<CustomDraft>) => void;
+  onReplace: () => void; onBuiltIn?: () => void; onSave: () => void; onClose: () => void;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageW, setStageW] = useState(480);
+  useLayoutEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => setStageW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { min, max } = CUSTOM_HEIGHT;
+  const height = Math.min(max, Math.max(min, draft.height));
+  const setHeight = (h: number) => onChange({ height: Math.round(Math.min(max, Math.max(min, h)) * 100) / 100 });
+  // Book and decoration at the same scale, shrunk together if they don't fit.
+  const gap = 20, pad = 24;
+  const fullH = 170;
+  const bookW = fullH * BOOK_ASPECT;
+  const decorW = fullH * height * draft.aspect;
+  const scale = Math.min(1, (stageW - pad * 2) / (bookW + gap + decorW));
+  const bookH = fullH * scale;
+  const wide = height * draft.aspect > BOOK_ASPECT;
+  const isNew = draft.at === NEW_BOOK;
+  const pct = Math.round(height * 100);
+  const stepBtn: React.CSSProperties = { ...btnStyle({ secondary: true, small: true }), minHeight: 34, width: 34, justifyContent: 'center', padding: 0, flexShrink: 0 };
+  return (
+    <div className="admin-modal-wrap" style={{
+      position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(0,0,0,0.35)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onClose}>
+      <div className="admin-modal admin-custom-decor" role="dialog" aria-label="Your decoration" style={{
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 560, maxHeight: '90vh',
+        overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{isNew ? 'Your own decoration' : `Decoration #${draft.at + 1}`}</span>
+          <button onClick={onClose} aria-label="Close" style={btnStyle({ secondary: true, small: true })}><X size={14} /></button>
+        </div>
+        <div style={{ padding: '14px 18px 18px', overflow: 'auto' }}>
+          {/* Preview: a paperback and the decoration on a shelf */}
+          <div ref={stageRef} className="admin-decor-stage" style={{
+            position: 'relative', height: fullH + 44, borderRadius: 8, overflow: 'hidden',
+            background: 'linear-gradient(#f7f6f3, #efede8)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: gap * scale,
+            paddingBottom: 14,
+          }}>
+            <div aria-label="A paperback, for scale" style={{
+              width: bookW * scale, height: bookH, borderRadius: 2, flexShrink: 0, position: 'relative',
+              background: 'linear-gradient(90deg, #d9d6cf 0%, #e4e1da 8%, #e4e1da 100%)', boxShadow: '0 1px 1px rgba(0,0,0,0.12), 3px -2px 8px rgba(0,0,0,0.06)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: Math.max(9, 11 * scale), color: '#9a968e', letterSpacing: '0.04em', textTransform: 'uppercase', transform: 'rotate(-90deg)', whiteSpace: 'nowrap' }}>Paperback</span>
+            </div>
+            <div style={{ width: decorW * scale, height: bookH * height, position: 'relative', flexShrink: 0 }}>
+              <div aria-hidden style={{
+                position: 'absolute', bottom: -3, height: 8, borderRadius: '50%', left: `${draft.base[0] * 100}%`, right: `${(1 - draft.base[1]) * 100}%`,
+                background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 72%)',
+              }} />
+              <img src={draft.preview} alt={draft.label} draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />
+            </div>
+            <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 14, background: 'linear-gradient(#e2dfd8, #d8d4cc)', borderTop: '1px solid #cfcac1' }} />
+          </div>
+
+          {!draft.transparent && (
+            <div role="note" style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, background: '#f6f6f4', fontSize: '0.76rem', lineHeight: 1.45, color: '#666' }}>
+              This image has no transparent background, so it will stand on the shelf as a rectangle. It works best as a PNG with the background removed.
+            </div>
+          )}
+
+          <label style={labelStyle} htmlFor="custom-decor-size">Height next to a paperback</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={() => setHeight(height - 0.05)} disabled={height <= min} aria-label="Smaller" style={{ ...stepBtn, opacity: height <= min ? 0.4 : 1 }}><Minus size={14} /></button>
+            <input id="custom-decor-size" type="range" min={min} max={max} step={0.01} value={height}
+              onChange={e => setHeight(Number(e.target.value))}
+              style={{ flex: 1, minWidth: 0, minHeight: 34, accentColor: '#1a1a1a', touchAction: 'none', cursor: 'pointer' }} />
+            <button type="button" onClick={() => setHeight(height + 0.05)} disabled={height >= max} aria-label="Bigger" style={{ ...stepBtn, opacity: height >= max ? 0.4 : 1 }}><Plus size={14} /></button>
+            <span style={{ fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', width: 42, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 4, lineHeight: 1.4 }}>
+            {pct >= 100 ? 'As tall as a paperback.' : `${pct}% as tall as a paperback.`}{wide ? ' It\u2019s wider than a book, so it takes two slots on the shelf.' : ''}
+          </div>
+
+          <label style={labelStyle} htmlFor="custom-decor-label">Name</label>
+          <input id="custom-decor-label" value={draft.label} maxLength={40} placeholder={CUSTOM_LABEL}
+            onChange={e => onChange({ label: e.target.value })} style={inputStyle} />
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 18 }}>
+            <button type="button" onClick={onReplace} disabled={busy} style={btnStyle({ secondary: true, small: true })}>
+              {busy ? <span className="admin-spinner" /> : <ImagePlus size={13} />} Choose another image…
+            </button>
+            {onBuiltIn && <button type="button" onClick={onBuiltIn} style={btnStyle({ secondary: true, small: true })}>Use a built-in one</button>}
+            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+              <button type="button" onClick={onClose} style={btnStyle({ secondary: true })}>Cancel</button>
+              <button type="button" onClick={onSave} disabled={busy} style={btnStyle()}>{isNew ? 'Add to shelf' : 'Done'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Decorations only stand on the Vitsoe shelf.
+function MinimalDecorWarning() {
+  return (
+    <div role="note" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 12px', marginBottom: 12, borderRadius: 8, background: '#fff8e6', border: '1px solid #f0e0b0', fontSize: '0.78rem', lineHeight: 1.45, color: '#5c4a1a' }}>
+      <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+      <span>Decorations only show on the Vitsoe shelf. With the Minimal shelf they stay in your list but won&rsquo;t appear on the site.</span>
+    </div>
+  );
+}
+
 function BookCover({ book }: { book: Book }) {
   const [state, setState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [src, setSrc] = useState<string | null>(null);

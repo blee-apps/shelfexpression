@@ -1,6 +1,7 @@
 // Export site: zips this site's built files with the current shelf
 // written into index.html, plus every cover, ready to upload to any host.
 import { pendingCovers } from './publish';
+import { customDecor } from './decor';
 import { COVER_MANIFEST, StaticShelf, StaticSiteSettings, CoverInfo } from './shelfData';
 
 const SETTINGS_KEY = 'bookshelf.staticSite';
@@ -72,7 +73,7 @@ const getFile = async (path: string): Promise<Uint8Array> => {
 export type ExportResult = { blob: Blob; fileName: string; books: number; covers: number; missingCovers: string[] };
 
 export async function createStaticSite(opts: {
-  content: { books: { id?: string; isbn?: string; title: string; coverUrl?: string }[]; [k: string]: unknown };
+  content: { books: { id?: string; isbn?: string; title?: string; coverUrl?: string; type?: string; decor?: string; src?: string }[]; [k: string]: unknown };
   site: StaticSiteSettings;
   onStep?: (text: string) => void;
 }): Promise<ExportResult> {
@@ -121,6 +122,21 @@ export async function createStaticSite(opts: {
   let coverCount = 0;
   const books = content.books.map(b => ({ ...b }));
   await Promise.all(books.map(async (book, i) => {
+    // Built-in decorations come with the site (public/decor). Your own one's
+    // image is packed into covers/ with the covers.
+    if (book.type === 'decor') {
+      const src = customDecor(book)?.src;
+      if (!src) return;
+      try {
+        const pending = pendingCovers.get(src);
+        const data = pending ? new Uint8Array(await pending.blob.arrayBuffer()) : await getFile(src);
+        const name = src.replace(/^\/+/, '');
+        if (!files[name]) add(name, data);
+      } catch {
+        missingCovers.push(customDecor(book)?.label || 'a decoration');
+      }
+      return;
+    }
     const key = book.isbn || book.id || String(i + 1);
     const known = COVER_MANIFEST[key];
     const src = book.coverUrl || known?.path || '';
@@ -136,7 +152,7 @@ export async function createStaticSite(opts: {
       covers[key] = { path: src, aspectRatio: ratio };
       if (!book.coverUrl) book.coverUrl = src;
     } catch {
-      missingCovers.push(book.title);
+      missingCovers.push(book.title || '');
     }
   }));
 
@@ -152,7 +168,7 @@ export async function createStaticSite(opts: {
   return {
     blob: new Blob([zipped as BlobPart], { type: 'application/zip' }),
     fileName: `${folder}.zip`,
-    books: books.length,
+    books: books.filter(b => b.type !== 'decor').length,
     covers: coverCount,
     missingCovers,
   };
