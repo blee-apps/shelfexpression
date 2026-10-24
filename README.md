@@ -120,10 +120,6 @@ vite.config.ts            Local-only helpers for the editor (saving covers and b
 
 Fonts (DM Serif Text and Manrope) are self-hosted, so no requests go to Google.
 
-### Updating from an older version
-
-Older copies kept books in `src/books.ts` and covers in `public/covers/`. Move your books into `content/books.json`, your covers into `content/covers/`, and your site details into `content/site.ts`.
-
 ## Credits
 
 Made by Brandon Lee ([sangsara.net](https://sangsara.net)). MIT licensed, so use it, change it and make it your own.
