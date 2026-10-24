@@ -38,7 +38,7 @@ Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and
 2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
 3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**.
-5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker or film camera on the shelf. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations only show on the **Vitsoe** shelf, not the **Minimal** one.
+5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker or film camera on the shelf. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations only show on the **Vitsoe** shelf, not the **Minimal** one.
 6. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
 
 ### 5. Publish

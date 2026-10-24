@@ -3,6 +3,7 @@
 import { SITE } from './shelfData';
 import { githubHeaders } from './github';
 import { updateSiteFile, SiteDetails } from '../server/siteFile';
+import { customDecor } from './decor';
 
 // --- Covers waiting to be published -------------------------------------
 // A cover picked or uploaded in the editor lives in the browser until you
@@ -43,10 +44,11 @@ export async function resizeCover(blob: Blob): Promise<Blob> {
 }
 
 // Adds a cover to the waiting list and returns its site path. Every new cover
-// gets a new file name, so browsers never show an old cached image.
-export function addPendingCover(key: string, blob: Blob): string {
+// gets a new file name, so browsers never show an old cached image. Your own
+// decorations wait here too (as .png or .webp, to keep their transparency).
+export function addPendingCover(key: string, blob: Blob, ext: 'jpg' | 'png' | 'webp' = 'jpg'): string {
   const safe = (key || 'cover').replace(/[^a-zA-Z0-9_-]/g, '') || 'cover';
-  const path = `/covers/${safe}-${Date.now().toString(36)}.jpg`;
+  const path = `/covers/${safe}-${Date.now().toString(36)}.${ext}`;
   pendingCovers.set(path, { blob, preview: URL.createObjectURL(blob) });
   return path;
 }
@@ -73,7 +75,7 @@ export async function fetchCover(src: string): Promise<Blob> {
 }
 
 // --- Commit message -------------------------------------------------------
-type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string; type?: string; decor?: string };
+type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string; type?: string; decor?: string; label?: string; src?: string; height?: number };
 type Shelf = { useVitsoeShelf: boolean; colorMode?: string; books: BookLike[]; share?: { footer?: string } };
 
 const quote = (titles: string[]) => titles.map(t => `\u201c${t}\u201d`).join(', ');
@@ -89,8 +91,11 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   const updated: string[] = [];
   const details: string[] = [];
   // Decorations: which ones are on the shelf, compared as a list.
-  const decorList = (s: Shelf) => s.books.filter(isDecorItem).map(b => b.decor || '').sort().join(', ');
-  const decorChanged = decorList(before) !== decorList(after);
+  // Your own ones are listed by their label.
+  const decorName = (b: BookLike) => { const c = customDecor(b); return c ? `${c.label} (your own)` : b.decor || ''; };
+  const decorList = (s: Shelf) => s.books.filter(isDecorItem).map(decorName).sort().join(', ');
+  const decorLook = (s: Shelf) => s.books.filter(isDecorItem).map(b => { const c = customDecor(b); return c ? `${c.src}|${c.height}` : ''; }).sort().join(',');
+  const decorChanged = decorList(before) !== decorList(after) || decorLook(before) !== decorLook(after);
   if (decorChanged) details.push(`Decorations: ${decorList(after) || 'none'}`);
   for (const b of after.books) {
     if (isDecorItem(b)) continue;
@@ -141,7 +146,10 @@ export const canonicalShelf = (json: string) => {
   try {
     const d = JSON.parse(json);
     const books = (d.books || []).map((b: any, i: number) => {
-      if (b?.type === 'decor') return { id: String(i + 1), type: 'decor', decor: b.decor || '' };
+      if (b?.type === 'decor') {
+        const c = customDecor(b);
+        return c ? { id: String(i + 1), type: 'decor', decor: 'custom', ...c } : { id: String(i + 1), type: 'decor', decor: b.decor || '' };
+      }
       const e: Record<string, unknown> = {
         id: String(i + 1), isbn: b.isbn || '', title: b.title || '', author: b.author || '',
         year: Number(b.year) || 0, synopsis: b.synopsis || '', gr: b.gr || '',
@@ -250,7 +258,12 @@ export async function publish(opts: {
   const shelf = JSON.parse(json) as Shelf & { books: (BookLike & { id: string })[] };
   const used = new Set<string>();
   for (const b of shelf.books) {
-    if (b.type === 'decor') continue; // decorations have no cover file
+    if (b.type === 'decor') {
+      // Built-in decorations come with the site; your own has its image in covers/.
+      const own = customDecor(b)?.src.match(/^\/covers\/([^/?#]+)$/)?.[1];
+      if (own) used.add(`content/covers/${own}`);
+      continue;
+    }
     const local = b.coverUrl?.match(/^\/covers\/([^/?#]+)$/)?.[1];
     used.add(`content/covers/${local || `${b.isbn || b.id}.jpg`}`);
   }

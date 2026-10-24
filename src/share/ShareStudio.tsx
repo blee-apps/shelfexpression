@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { X, Share2, Download, GripVertical, ChevronLeft } from 'lucide-react';
 import { isDecor, type Book } from '../books';
-import { decorById } from '../decor';
+import { decorDefOf } from '../decor';
 import { renderShare, morphShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 
 const OPTIONS_KEY = 'bookshelf.shareOptions';
@@ -62,7 +62,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
 
   const shareBooks: ShareBook[] = order.map(b => ({
     title: b.title, author: b.author, year: b.year, synopsis: b.synopsis, img: imgs.get(b.id) ?? null,
-    decor: isDecor(b) ? decorById(b.decor)?.height ?? 0.5 : undefined,
+    decor: isDecor(b) ? decorDefOf(b)?.height ?? 0.5 : undefined,
   }));
   const single = order.length === 1;
   const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' ? 'grid' : opts.layout;
@@ -189,7 +189,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   {isDecor(b) ? (
                     // A decoration at its size next to a paperback, standing on the bottom.
                     <div style={{ width: 54, height: 80, borderRadius: 3, overflow: 'hidden', background: '#f6f5f2', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                      {imgs.get(b.id) && <img src={imgs.get(b.id)!.src} alt="" draggable={false} style={{ height: `${(decorById(b.decor)?.height ?? 0.5) * 100}%`, maxWidth: '100%', objectFit: 'contain', objectPosition: 'bottom', display: 'block', pointerEvents: 'none' }} />}
+                      {imgs.get(b.id) && <img src={imgs.get(b.id)!.src} alt="" draggable={false} style={{ height: `${(decorDefOf(b)?.height ?? 0.5) * 100}%`, maxWidth: '100%', objectFit: 'contain', objectPosition: 'bottom', display: 'block', pointerEvents: 'none' }} />}
                     </div>
                   ) : (
                     <div style={{ width: 54, height: 80, borderRadius: 3, overflow: 'hidden', background: '#ddd', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}>

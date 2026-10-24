@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, isDecor } from './src/books';
-import { decorById, BOOK_ASPECT, DecorDef } from './src/decor';
+import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
 
 const AdminGate = lazy(() => import('./src/AdminGate'));
@@ -941,7 +941,7 @@ export default function App() {
     const cols = slot.cols || 1;
     let col = 0;
     for (const item of SHELF_ITEMS) {
-      const def = isDecor(item) ? decorById(item.decor) : undefined;
+      const def = isDecor(item) ? decorDefOf(item) : undefined;
       if (isDecor(item) && !def) continue;
       const height = def ? (slot.w / BOOK_ASPECT) * def.height : 0;
       const span = def && slot.w > 0 && height * def.aspect > slot.w && cols >= 2 ? 2 : 1;
