@@ -55,8 +55,11 @@ export const SITE = {
   title: staticSite?.title ?? BUNDLED_SITE.title,
   subtitle: staticSite ? (count: number) => fillCount(staticSite.subtitle, count) : BUNDLED_SITE.subtitle,
   nav: (staticSite?.nav ?? BUNDLED_SITE.nav) as NavLink[],
-  // A static site has no GitHub repo to publish to.
-  github: staticSite ? { repo: '', branch: 'main', testBranch: 'editor-test' } : BUNDLED_SITE.github,
+  // A static site has no GitHub repo to publish to. Otherwise an empty
+  // github.repo means the repo this copy was built from.
+  github: staticSite
+    ? { repo: '', branch: 'main', testBranch: 'editor-test' }
+    : { ...BUNDLED_SITE.github, repo: BUNDLED_SITE.github.repo || (typeof __SHELF_REPO__ === 'string' ? __SHELF_REPO__ : '') },
   guestMode: (BUNDLED_SITE as { guestMode?: boolean }).guestMode !== false,
 };
 

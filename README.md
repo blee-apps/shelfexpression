@@ -19,7 +19,7 @@ Open the address it prints (usually http://localhost:5173).
 
 ### 2. Set your site details
 
-Edit `content/site.ts` to set your site name, link, heading, subtitle and header menu. Set `github.repo` to your new repo (for example `'your-name/your-shelf'`) so you can edit from the live site later.
+Open the editor with **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows and Linux), tap **Site details**, and fill in your site name, heading, the line under it and your menu links. **Save** writes them into `content/site.ts` for you. Your GitHub repo is filled in automatically.
 
 ### 3. Publish
 
@@ -31,7 +31,7 @@ The site is fully static. Covers are saved in your repo, so it never depends on 
 
 Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and Linux. On a phone or tablet, tap the big heading five times. The same keystroke closes it.
 
-On the live site, it first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device. Anyone else who finds the editor can't get past this step.
+On the live site, it first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device. Anyone else who finds the editor can't get past this step. Once you're in, **Site details** saves straight to your live site too.
 
 1. Tap **Add book**, then type the title and author. The editor searches **Apple Books, Google Books and OpenLibrary** at once.
 2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
@@ -100,7 +100,7 @@ Up to three settings sit alongside the books: `useVitsoeShelf`, `colorMode` (`li
 ## How it's put together
 
 ```
-content/site.ts           Your site name, heading, menu, GitHub repo and guest mode
+content/site.ts           Your site name, heading, menu, GitHub repo and guest mode (Site details in the editor writes it)
 content/books.json        Your books, shelf style, mode and share footer
 content/covers/           Saved cover images (served at /covers/)
 digital_bookshelf.tsx     The shelf, animations and detail view
@@ -108,6 +108,7 @@ src/AdminGate.tsx         Asks for a GitHub key before the editor opens on the l
 src/UpdateTool.tsx        The editor
 src/exportSite.ts         Export site: zips the site with your books inside
 src/StaticSitePanel.tsx   The Export site sheet (site details and Download)
+src/SiteDetailsPanel.tsx  The Site details sheet: saves to content/site.ts, or to GitHub on the live site
 src/shelfData.ts          Reads your books and site details (or a static site's own copy)
 src/publish.ts            Publishing to GitHub, drafts and deploy status
 src/share/                Share images: drawing and the share studio

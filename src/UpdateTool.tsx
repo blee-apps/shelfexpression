@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe } from 'lucide-react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER } from './books';
 import ShareStudio from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
+import SiteDetailsPanel from './SiteDetailsPanel';
 import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
 import { getToken } from './github';
 import { pendingCovers, coverSrc, addPendingCover, fetchCover, resizeCover, describeChanges, publish, PublishError, PublishResult,
@@ -124,6 +125,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
   const [studioOpen, setStudioOpen] = useState(false);
   const [staticOpen, setStaticOpen] = useState(false);
+  const [siteOpen, setSiteOpen] = useState(false);
   // Footer line on share images. Starts as the site address, then remembers
   // what you type (on this device right away, and in books.json on publish).
   const [shareFooter, setShareFooter] = useState<string | undefined>(() => {
@@ -1008,7 +1010,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {/* SHARE + HOST IT YOURSELF: side by side when there's room, stacked on a phone */}
         {!shareMode && (
-          <div className="admin-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 12, marginBottom: 16 }}>
+          <div className="admin-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12, marginBottom: 16 }}>
             <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #fafafa, #f3f1ee)' }}>
               <Share2 size={18} style={{ color: '#555', flexShrink: 0 }} />
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -1016,6 +1018,14 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                 <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
               </div>
               <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Create image</button>
+            </div>
+            <div className="admin-site-card" style={{ ...cardStyle, background: '#fafafa' }}>
+              <PenLine size={18} style={{ color: '#555', flexShrink: 0 }} />
+              <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Site details</div>
+                <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Your site name, heading and menu.</div>
+              </div>
+              <button onClick={() => setSiteOpen(true)} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Edit</button>
             </div>
             <div className="admin-static-card" style={{ ...cardStyle, background: '#fafafa' }}>
               <Globe size={18} style={{ color: '#555', flexShrink: 0 }} />
@@ -1251,6 +1261,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             setStudioOpen(false);
           }}
         />
+      )}
+
+      {siteOpen && (
+        <SiteDetailsPanel bookCount={filledCount} onClose={() => setSiteOpen(false)} toTest={publishToTest}
+          target={import.meta.env.DEV ? 'local' : guest || IS_STATIC_SITE ? 'device' : 'github'} />
       )}
 
       {staticOpen && (
