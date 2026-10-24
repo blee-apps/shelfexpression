@@ -73,21 +73,27 @@ export async function fetchCover(src: string): Promise<Blob> {
 }
 
 // --- Commit message -------------------------------------------------------
-type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string };
+type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string; type?: string; decor?: string };
 type Shelf = { useVitsoeShelf: boolean; colorMode?: string; books: BookLike[]; share?: { footer?: string } };
 
 const quote = (titles: string[]) => titles.map(t => `\u201c${t}\u201d`).join(', ');
 
 // Describes what changed between two versions of the shelf, in plain words.
 export function describeChanges(before: Shelf, after: Shelf): { summary: string; details: string[] } {
-  const keyOf = (b: BookLike) => `${b.title.toLowerCase()}|${b.author.toLowerCase()}`;
+  const isDecorItem = (b: BookLike) => b.type === 'decor';
+  const keyOf = (b: BookLike) => isDecorItem(b) ? `decor:${b.decor || ''}` : `${(b.title || '').toLowerCase()}|${(b.author || '').toLowerCase()}`;
   const old = new Map(before.books.map(b => [keyOf(b), b]));
   const now = new Map(after.books.map(b => [keyOf(b), b]));
-  const added = after.books.filter(b => !old.has(keyOf(b))).map(b => b.title);
-  const removed = before.books.filter(b => !now.has(keyOf(b))).map(b => b.title);
+  const added = after.books.filter(b => !isDecorItem(b) && !old.has(keyOf(b))).map(b => b.title);
+  const removed = before.books.filter(b => !isDecorItem(b) && !now.has(keyOf(b))).map(b => b.title);
   const updated: string[] = [];
   const details: string[] = [];
+  // Decorations: which ones are on the shelf, compared as a list.
+  const decorList = (s: Shelf) => s.books.filter(isDecorItem).map(b => b.decor || '').sort().join(', ');
+  const decorChanged = decorList(before) !== decorList(after);
+  if (decorChanged) details.push(`Decorations: ${decorList(after) || 'none'}`);
   for (const b of after.books) {
+    if (isDecorItem(b)) continue;
     const o = old.get(keyOf(b));
     if (!o) continue;
     const changed = (['isbn', 'year', 'synopsis', 'gr', 'coverUrl'] as const).filter(k => (o[k] ?? '') !== (b[k] ?? ''));
@@ -113,6 +119,7 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (added.length) parts.push(added.length === 1 ? `add ${quote(added)}` : `add ${added.length} books`);
   if (removed.length) parts.push(removed.length === 1 ? `remove ${quote(removed)}` : `remove ${removed.length} books`);
   if (updated.length) parts.push(updated.length === 1 ? `update ${quote(updated)}` : `update ${updated.length} books`);
+  if (decorChanged) parts.push('change decorations');
   if (reordered && !parts.length) parts.push('reorder books');
   if (!parts.length && before.useVitsoeShelf !== after.useVitsoeShelf) parts.push('change shelf style');
   if (!parts.length && modeChanged) parts.push(`switch to ${modeAfter} mode`);
@@ -134,6 +141,7 @@ export const canonicalShelf = (json: string) => {
   try {
     const d = JSON.parse(json);
     const books = (d.books || []).map((b: any, i: number) => {
+      if (b?.type === 'decor') return { id: String(i + 1), type: 'decor', decor: b.decor || '' };
       const e: Record<string, unknown> = {
         id: String(i + 1), isbn: b.isbn || '', title: b.title || '', author: b.author || '',
         year: Number(b.year) || 0, synopsis: b.synopsis || '', gr: b.gr || '',
@@ -212,6 +220,7 @@ export async function publish(opts: {
   const shelf = JSON.parse(json) as Shelf & { books: (BookLike & { id: string })[] };
   const used = new Set<string>();
   for (const b of shelf.books) {
+    if (b.type === 'decor') continue; // decorations have no cover file
     const local = b.coverUrl?.match(/^\/covers\/([^/?#]+)$/)?.[1];
     used.add(`content/covers/${local || `${b.isbn || b.id}.jpg`}`);
   }

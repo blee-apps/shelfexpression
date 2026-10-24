@@ -72,7 +72,7 @@ const getFile = async (path: string): Promise<Uint8Array> => {
 export type ExportResult = { blob: Blob; fileName: string; books: number; covers: number; missingCovers: string[] };
 
 export async function createStaticSite(opts: {
-  content: { books: { id?: string; isbn?: string; title: string; coverUrl?: string }[]; [k: string]: unknown };
+  content: { books: { id?: string; isbn?: string; title?: string; coverUrl?: string; type?: string }[]; [k: string]: unknown };
   site: StaticSiteSettings;
   onStep?: (text: string) => void;
 }): Promise<ExportResult> {
@@ -121,6 +121,8 @@ export async function createStaticSite(opts: {
   let coverCount = 0;
   const books = content.books.map(b => ({ ...b }));
   await Promise.all(books.map(async (book, i) => {
+    // Decorations come with the site (public/decor), not from covers/.
+    if (book.type === 'decor') return;
     const key = book.isbn || book.id || String(i + 1);
     const known = COVER_MANIFEST[key];
     const src = book.coverUrl || known?.path || '';
@@ -136,7 +138,7 @@ export async function createStaticSite(opts: {
       covers[key] = { path: src, aspectRatio: ratio };
       if (!book.coverUrl) book.coverUrl = src;
     } catch {
-      missingCovers.push(book.title);
+      missingCovers.push(book.title || '');
     }
   }));
 
@@ -152,7 +154,7 @@ export async function createStaticSite(opts: {
   return {
     blob: new Blob([zipped as BlobPart], { type: 'application/zip' }),
     fileName: `${folder}.zip`,
-    books: books.length,
+    books: books.filter(b => b.type !== 'decor').length,
     covers: coverCount,
     missingCovers,
   };

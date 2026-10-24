@@ -23,6 +23,9 @@ export interface ShareBook {
   year?: number;
   synopsis?: string;
   img: HTMLImageElement | null;
+  // A decoration: its height next to a paperback (1 = as tall). It stands at
+  // the bottom of its row, at that size, instead of filling the row.
+  decor?: number;
 }
 
 export const SIZES: Record<ShareSize, { w: number; h: number; label: string; hint: string }> = {
@@ -59,10 +62,12 @@ export function coverColor(img: HTMLImageElement | null): [number, number, numbe
     const d = x.getImageData(0, 0, c.width, c.height).data;
     let r = 0, g = 0, b = 0, wsum = 0;
     for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue; // see-through parts of a decoration
       const max = Math.max(d[i], d[i + 1], d[i + 2]), min = Math.min(d[i], d[i + 1], d[i + 2]);
       const w = 0.15 + (max - min) / 255; // favor colorful pixels
       r += d[i] * w; g += d[i + 1] * w; b += d[i + 2] * w; wsum += w;
     }
+    if (!wsum) return null;
     r /= wsum; g /= wsum; b /= wsum;
     // Pull toward a muted middle so it's never neon or pure black.
     const l = luminance(r, g, b);
@@ -150,7 +155,41 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, 
   ctx.restore();
 }
 
-const ratio = (b: ShareBook) => (b.img && b.img.naturalHeight ? b.img.naturalWidth / b.img.naturalHeight : 2 / 3);
+const imgRatio = (b: ShareBook) => (b.img && b.img.naturalHeight ? b.img.naturalWidth / b.img.naturalHeight : 2 / 3);
+// How wide an item is for each unit of row height. A decoration is shorter
+// than the row, so it takes less width.
+const ratio = (b: ShareBook) => imgRatio(b) * (b.decor ?? 1);
+
+// A decoration standing with its base at y + h (h is the row's book height).
+// Its shadows follow its outline: a soft one behind, and a tight one where it
+// touches the surface.
+function drawDecor(ctx: CanvasRenderingContext2D, b: ShareBook, x: number, y: number, rowH: number, p: Palette, wall: boolean) {
+  const h = rowH * (b.decor ?? 1), w = h * imgRatio(b), top = y + rowH - h;
+  const img = b.img;
+  const draw: CoverDraw = (c, dx, dy, dw, dh) => {
+    c.save();
+    // Contact shadow: a flat soft ellipse under its base.
+    const cx = dx + dw / 2, cy = dy + dh;
+    const rx = dw * 0.42, ry = Math.max(3, dh * 0.025);
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, rx);
+    g.addColorStop(0, `rgba(0,0,0,${p.dark ? 0.55 : 0.28})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.translate(cx, cy);
+    c.scale(1, ry / rx);
+    c.translate(-cx, -cy);
+    c.fillStyle = g;
+    c.beginPath(); c.arc(cx, cy, rx, 0, Math.PI * 2); c.fill();
+    c.restore();
+    c.save();
+    c.shadowColor = `rgba(0,0,0,${wall ? (p.dark ? 0.45 : 0.14) : p.shadow * 0.6})`;
+    c.shadowBlur = Math.max(10, dw * 0.06);
+    c.shadowOffsetX = wall ? 5 : 0;
+    c.shadowOffsetY = wall ? -4 : Math.max(3, dh * 0.02);
+    if (img) c.drawImage(img, dx, dy, dw, dh);
+    c.restore();
+  };
+  if (!captured(img, x, top, w, h, draw)) draw(ctx, x, top, w, h);
+}
 
 // Splits covers into rows where every cover in a row is the same height and
 // the row exactly fills the width, then picks the row count that makes the
@@ -262,8 +301,9 @@ function drawGrid(ctx: CanvasRenderingContext2D, books: ShareBook[], o: ShareOpt
     for (const k of row.items) {
       const b = books[k];
       const w = row.h * ratio(b);
-      drawCover(ctx, b.img, x, y, w, row.h, p);
-      if (labels) {
+      if (b.decor) drawDecor(ctx, b, x, y, row.h, p, false);
+      else drawCover(ctx, b.img, x, y, w, row.h, p);
+      if (labels && !b.decor) {
         ctx.textAlign = 'left';
         setFont(ctx, lab.t, SANS, 600);
         ctx.fillStyle = p.text;
@@ -348,6 +388,7 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
     for (const k of row.items) {
       const w = row.h * ratio(books[k]);
       const img = books[k].img;
+      if (books[k].decor) { drawDecor(ctx, books[k], x, y, row.h, p, true); x += w + gap; continue; }
       // A tight contact shadow where it stands, and a soft one on the wall
       // behind (up and to the side, so the book doesn't float over the lip).
       const standing: CoverDraw = (c, bx, by, bw, bh) => {
@@ -370,7 +411,7 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
 }
 
 function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOptions, p: Palette, box: Box, W: number) {
-  const ar = ratio(book);
+  const ar = imgRatio(book);
   const left = o.align === 'left';
   const byline = [book.author, book.year ? String(book.year) : ''].filter(Boolean).join('  \u00b7  ');
   const synopsis = o.synopsis ? (book.synopsis || '').trim() : '';
@@ -426,7 +467,8 @@ function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOpt
   const blockH = coverH + 64 + t.h;
   const y0 = box.y + (box.h - blockH) / 2;
   const cx = left ? box.x : box.x + (box.w - cw) / 2;
-  drawCover(ctx, book.img, cx, y0, cw, coverH, p);
+  if (book.decor) drawDecor(ctx, { ...book, decor: 1 }, cx, y0, coverH, p, false);
+  else drawCover(ctx, book.img, cx, y0, cw, coverH, p);
   drawText(t, left ? box.x : W / 2, y0 + coverH + 64, left ? 'left' : 'center');
 }
 
