@@ -660,6 +660,23 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const sameJson = (a: string, b: string) => canonicalShelf(a) === canonicalShelf(b);
   const hasChanges = !sameJson(currentJson, baseJson);
 
+  // --- SAVE (on your computer) ---
+  // Writes the shelf into content/books.json, without reloading the page.
+  const [savingShelf, setSavingShelf] = useState(false);
+  const saveLocal = async () => {
+    setSavingShelf(true);
+    try {
+      const r = await fetch('/api/save-shelf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: JSON.parse(currentJson) }) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setBaseJson(currentJson);
+      showToast('Saved to content/books.json.');
+    } catch (err: any) {
+      showToast(`Couldn\u2019t save (${err.message}).`);
+    }
+    setSavingShelf(false);
+  };
+
   const validate = (): string | null => {
     const filled = slots.filter((b): b is Book => b !== null);
     if (!filled.length) return 'The shelf is empty.';
@@ -907,6 +924,13 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           <h1 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Bookshelf Editor</h1>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+          {import.meta.env.DEV && (
+            <button onClick={saveLocal} disabled={savingShelf || !hasChanges} className="admin-save"
+              title={hasChanges ? 'Save your books, look and share footer into content/books.json' : 'Everything is saved'}
+              style={{ ...btnStyle({ small: true }), ...(!hasChanges ? { opacity: 0.45, cursor: 'default' } : {}) }}>
+              {savingShelf ? 'Saving\u2026' : hasChanges ? 'Save' : 'Saved'}
+            </button>
+          )}
           <button onClick={reloadFromApp} style={btnStyle({ secondary: true, small: true })}>Reload from App</button>
           {onForgetKey && (
             <button onClick={() => { if (confirm('Remove your GitHub key from this device? You\u2019ll need to paste it again to edit.')) onForgetKey(); }}
