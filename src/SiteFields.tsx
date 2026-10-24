@@ -1,7 +1,7 @@
 // The site detail fields (name, link, heading, subtitle, menu). Shared by the
 // Site details sheet and the Export site sheet, and remembered on this device,
 // so they're only typed once.
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { SITE, StaticSiteSettings, NavLink, subtitleTemplate } from './shelfData';
 import { loadSiteSettings, saveSiteSettings } from './exportSite';
 
@@ -40,6 +40,14 @@ export function SiteFields({ value: s, onChange, bookCount }: {
   };
   const setLink = (i: number, patch: Partial<NavLink>) =>
     update({ nav: s.nav.map((l, j) => j === i ? { ...l, ...patch } : l) });
+  // Swaps a link with its neighbor above (-1) or below (+1).
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= s.nav.length) return;
+    const nav = [...s.nav];
+    [nav[i], nav[j]] = [nav[j], nav[i]];
+    update({ nav });
+  };
   const preview = s.subtitle.split('{count}').join(String(bookCount));
 
   return <>
@@ -59,8 +67,14 @@ export function SiteFields({ value: s, onChange, bookCount }: {
 
     <label style={fieldLabel}>Menu links <span style={fieldHint}>(up to {MAX_LINKS}; none hides the menu)</span></label>
     {s.nav.map((l, i) => (
-      <div key={i} className="static-site-link" style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-        <input value={l.label} onChange={e => setLink(i, { label: e.target.value })} style={{ ...fieldInput, flex: '0 0 32%' }} placeholder="Label" />
+      <div key={i} className="static-site-link" style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'stretch' }}>
+        {s.nav.length > 1 && (
+          <div className="static-site-link-order" style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+            <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move link up" style={arrowBtn(i === 0)}><ChevronUp size={13} /></button>
+            <button onClick={() => move(i, 1)} disabled={i === s.nav.length - 1} aria-label="Move link down" style={arrowBtn(i === s.nav.length - 1)}><ChevronDown size={13} /></button>
+          </div>
+        )}
+        <input value={l.label} onChange={e => setLink(i, { label: e.target.value })} style={{ ...fieldInput, flex: '0 0 30%', minWidth: 0 }} placeholder="Label" />
         <input value={l.href} onChange={e => setLink(i, { href: e.target.value })} style={{ ...fieldInput, flex: 1, minWidth: 0 }} placeholder="https://"
           inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
         <button onClick={() => update({ nav: s.nav.filter((_, j) => j !== i) })} style={sheetBtn({ secondary: true, small: true })} aria-label="Remove link"><Trash2 size={13} /></button>
@@ -78,6 +92,10 @@ export const sheetBtn = ({ secondary, small }: { secondary?: boolean; small?: bo
   display: 'inline-flex', alignItems: 'center', gap: 5, padding: small ? '5px 10px' : '8px 16px',
   border: 'none', borderRadius: 5, fontSize: small ? '0.72rem' : '0.82rem', fontWeight: 500, cursor: 'pointer',
   background: secondary ? '#eee' : '#1a1a1a', color: secondary ? '#333' : '#fff', flexShrink: 0,
+});
+const arrowBtn = (off: boolean): React.CSSProperties => ({
+  flex: 1, width: 28, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  border: 'none', borderRadius: 4, background: '#eee', color: '#333', cursor: off ? 'default' : 'pointer', opacity: off ? 0.35 : 1,
 });
 export const fieldInput: React.CSSProperties = {
   width: '100%', padding: '7px 9px', border: '1px solid #ddd', borderRadius: 4,
