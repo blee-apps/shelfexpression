@@ -39,7 +39,7 @@ On the live site, it first asks for a GitHub key that can write to your repo. Ma
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**. Your changes are kept on the device as a draft until you publish, and you can restore or discard a draft the next time you open the editor.
 5. Tap **Publish**. The editor commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview.
 
-Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`. When you're done, tap **Generate**, paste the code into `content/books.json`, and commit. Or use **Export site**, which saves everything for you (see below). On the live site, the same tools sit under **Advanced: load or copy books.json** at the bottom of the editor.
+Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`, and **Save** at the top writes your books, look and share footer into `content/books.json`. Then commit and push. On the live site, Load and Generate sit under **Advanced: load or copy books.json** at the bottom of the editor.
 
 ### 5. Choose a look
 
@@ -69,7 +69,7 @@ You get a zip with a complete website: your books, every cover, and your shelf s
 
 Turn on **Include the editor** to edit on that site later. It opens the same way (the keystroke or five taps), with no key and no Publish. Make your changes, tap **Export site** again, and upload the new folder over the old one. On a plain host, some covers can't be fetched from book sites, but uploading your own image always works.
 
-**Guest mode.** Anyone who finds the editor on your site can tap **Continue as guest** to try it, make share images or create a static site. Nothing is ever published. To turn that off, set `guestMode: false` in `content/site.ts`. Then the editor only opens with your GitHub key.
+**Guest mode.** Anyone who finds the editor on your site can tap **Continue as guest** to try it, make share images or create a static site. Nothing is ever published. To turn that off, untick **Let visitors try the editor** in **Site details**. Then the editor only opens with your GitHub key.
 
 ## Optional API keys
 

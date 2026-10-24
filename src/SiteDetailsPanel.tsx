@@ -20,6 +20,7 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
 }) {
   const [s, setS] = useState<StaticSiteSettings>(siteDefaults);
   const [repo, setRepo] = useState(SITE.github.repo);
+  const [guestMode, setGuestMode] = useState(SITE.guestMode);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ text: string; error?: boolean; done?: boolean } | null>(null);
 
@@ -35,7 +36,7 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
       if (target === 'local') {
         const res = await fetch('/api/save-site', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...details, repo: r }),
+          body: JSON.stringify({ ...details, repo: r, guestMode }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -43,7 +44,7 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
       } else {
         const token = getToken();
         if (!token) throw new Error('No GitHub key on this device. Close the editor and open it again to add one.');
-        await publishSiteDetails({ token, site: details, toTest });
+        await publishSiteDetails({ token, site: { ...details, guestMode }, toTest });
         setStatus({
           text: toTest
             ? `Saved to ${SITE.github.testBranch}. It shows on the test preview in a minute or two.`
@@ -58,7 +59,7 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
   };
 
   const note = target === 'local'
-    ? 'Saved into content/site.ts. Commit it with your books.'
+    ? 'Saved into content/site.ts.'
     : target === 'github'
       ? `Save updates your site right away${toTest ? ` (on ${SITE.github.testBranch}, like Publish)` : ''}. Books still go out with Publish.`
       : 'Kept on this device and used when you Export site.';
@@ -83,6 +84,19 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
           </p>
 
           <SiteFields value={s} onChange={v => { setS(v); setStatus(null); }} bookCount={bookCount} />
+
+          {target !== 'device' && (
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 18, cursor: 'pointer' }}>
+              <input type="checkbox" checked={guestMode} onChange={e => { setGuestMode(e.target.checked); setStatus(null); }}
+                className="site-guest-toggle" style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0 }} />
+              <span style={{ fontSize: '0.8rem', lineHeight: 1.45 }}>
+                <b style={{ fontWeight: 600 }}>Let visitors try the editor</b>
+                <span style={{ display: 'block', color: '#888', fontSize: '0.75rem' }}>
+                  Anyone who finds the editor on your site can tap Continue as guest to make share images or export a copy. They can never publish. Off means only your GitHub key gets in.
+                </span>
+              </span>
+            </label>
+          )}
 
           {target === 'local' && <>
             <label style={{ ...fieldLabel, marginTop: 18 }}>GitHub repo <span style={fieldHint}>(lets you edit on the live site)</span></label>
