@@ -314,11 +314,29 @@ export async function fetchPublishedCover(token: string, sitePath: string): Prom
 // --- Deploy status --------------------------------------------------------
 export type Deploy = { state: 'waiting' | 'building' | 'ready' | 'failed' | 'no-access'; url?: string };
 
-// Vercel reports each build to GitHub as a "deployment". This reads the one
-// for a commit. Needs the key to have Deployments: Read-only.
-export async function deployStatus(token: string, sha: string): Promise<Deploy> {
+// Vercel (and Netlify, when it does) reports each build to GitHub as a
+// "deployment". This reads the one for a commit. Needs the key to have
+// Deployments: Read-only. For the live site there's also a check that needs
+// no access at all: each build writes its commit into /version.json, so once
+// that matches, the new version is live, whatever the host.
+const liveCommit = async (): Promise<string> => {
+  try {
+    const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    return r.ok ? ((await r.json()).commit || '') : '';
+  } catch { return ''; }
+};
+
+export async function deployStatus(token: string, sha: string, live = false): Promise<Deploy> {
+  const d = await githubDeploy(token, sha);
+  if (live && d.state !== 'ready' && d.state !== 'failed' && await liveCommit() === sha)
+    return { state: 'ready', url: window.location.origin };
+  return d;
+}
+
+async function githubDeploy(token: string, sha: string): Promise<Deploy> {
   const base = `https://api.github.com/repos/${SITE.github.repo}`;
-  const r = await fetch(`${base}/deployments?sha=${sha}`, { headers: githubHeaders(token) });
+  let r: Response;
+  try { r = await fetch(`${base}/deployments?sha=${sha}`, { headers: githubHeaders(token) }); } catch { return { state: 'waiting' }; }
   if (r.status === 403 || r.status === 404) return { state: 'no-access' };
   if (!r.ok) return { state: 'waiting' };
   const list = await r.json();

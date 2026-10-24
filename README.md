@@ -42,13 +42,18 @@ Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and
 
 ### 5. Publish
 
-When you're happy with it, commit and push your repo to GitHub, then import it into [Vercel](https://vercel.com/new). The defaults just work: the build command is `npm run build` and the output folder is `dist`. Every push to `main` goes live.
+When you're happy with it, commit and push your repo to GitHub. Then pick a host. Both have free plans:
 
-The site is fully static. Covers are saved in your repo, so it never depends on other websites at runtime. Netlify or any static host works too, but book search, Goodreads lookup and cover fetching on the live site use small Vercel functions in `api/`. Elsewhere, keep adding books locally with `npm run dev`.
+- **Vercel:** go to [vercel.com/new](https://vercel.com/new), import your repo and tap **Deploy**.
+- **Netlify:** go to [app.netlify.com/start](https://app.netlify.com/start), choose **GitHub**, pick your repo and tap **Deploy**.
 
-From then on, you can also edit right on your live site. The editor first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device, and anyone else who finds the editor can't get past this step.
+You don't need to change any settings. The build command (`npm run build`) and output folder (`dist`) fill themselves in, from `netlify.toml` on Netlify. From then on, every push to `main` goes live.
 
-On the live site, **Publish** takes the place of Save. It commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview. Until you publish, your changes are kept on the device as a draft, which you can restore or discard the next time you open the editor. **Site details** saves straight to your live site too, and the old copy-and-paste tools sit under **Advanced: load or copy books.json** at the bottom.
+The site is fully static. Covers are saved in your repo, so it never depends on other websites at runtime. The Goodreads lookup and cover fetching on the live site use two small functions, which run on both Vercel and Netlify. Any other static host works too, but there, add books locally with `npm run dev`.
+
+From then on, you can also edit right on your live site. The editor first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to follow the build of a test preview. The key stays on that device, and anyone else who finds the editor can't get past this step.
+
+On the live site, **Publish** takes the place of Save. It commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a preview. Vercel builds it by itself. On Netlify, turn it on once: go to **Site configuration → Build & deploy → Continuous deployment → Branches and deploy contexts**, set **Branch deploys** to **Let me add individual branches**, and add `editor-test`. Until you publish, your changes are kept on the device as a draft, which you can restore or discard the next time you open the editor. **Site details** saves straight to your live site too, and the old copy-and-paste tools sit under **Advanced: load or copy books.json** at the bottom.
 
 ### 6. Share your favorites
 
@@ -63,7 +68,7 @@ On an iPhone, **Share** opens the share sheet, so you can save the image to Phot
 
 ### 7. Host it yourself, without GitHub
 
-You don't need GitHub or Vercel to have a shelf. In the editor, tap **Export site** (under *Host it yourself*). Fill in your site name, link, heading, the line under it (`{count}` becomes the number of books) and up to five menu links, then tap **Download**.
+You don't need GitHub, Vercel or Netlify to have a shelf. In the editor, tap **Export site** (under *Host it yourself*). Fill in your site name, link, heading, the line under it (`{count}` becomes the number of books) and up to five menu links, then tap **Download**.
 
 You get a zip with a complete website: your books, every cover, and your shelf style, mode and share footer. If you export from your own computer (`npm run dev`), the editor also saves your books, look and share footer into `content/books.json`, and the site details into `content/site.ts`. Next time you run it, everything is just as you left it. Unzip it and upload the folder to any web host, such as Netlify Drop, Cloudflare Pages, Neocities or your own server. Put it at the top of an address (like `books.example.com`), not in a subfolder.
 
@@ -80,7 +85,7 @@ Everything works without keys. Add these to a `.env` file in the project folder 
 | `VITE_GOOGLE_BOOKS_API_KEY` | Raises Google Books' rate limits for search and covers. |
 | `VITE_OPENROUTER_API_KEY` | Adds a **Summarize** button to the editor that tightens long synopses using an [OpenRouter](https://openrouter.ai/keys) model. Local only. |
 
-> **Important:** anything starting with `VITE_` ends up in the JavaScript visitors download. Never add `VITE_OPENROUTER_API_KEY` to your host. Keep it in your local `.env`, which isn't committed. If you add the Google Books key to your host, restrict it to your domain and the Books API in Google Cloud Console.
+> **Important:** anything starting with `VITE_` ends up in the JavaScript visitors download. Never add `VITE_OPENROUTER_API_KEY` to your host. Keep it in your local `.env`, which isn't committed. To use the Google Books key on your live site, add it under **Environment variables** in your Vercel or Netlify project settings, then redeploy. Restrict it to your domain and the Books API in Google Cloud Console.
 
 ## Book fields
 
@@ -114,6 +119,7 @@ src/publish.ts            Publishing to GitHub, drafts and deploy status
 src/share/                Share images: drawing and the share studio
 src/bookSearch.ts         Apple Books / Google Books / OpenLibrary search
 api/, server/lookup.ts    Goodreads and cover lookups (Vercel functions, and the dev server)
+netlify/, netlify.toml    The same lookups and settings for Netlify
 scripts/measure-covers.ts Measures saved covers at build time
 vite.config.ts            Local-only helpers for the editor (saving covers and books)
 ```
@@ -124,7 +130,7 @@ Fonts (DM Serif Text and Manrope) are self-hosted, so no requests go to Google.
 
 Both look identical to visitors. The difference is how you edit them.
 
-| | Full site (GitHub + Vercel) | Exported zip (any host) |
+| | Full site (GitHub + Vercel or Netlify) | Exported zip (any host) |
 |---|---|---|
 | Where your books live | `content/` in your repo, with history | Baked into the zip's `index.html` |
 | Editing | The editor, unlocked with your GitHub key | The editor, if you included it, with no key |
@@ -132,7 +138,7 @@ Both look identical to visitors. The difference is how you edit them.
 | Unsaved changes | Kept as a draft on your device | Lost unless you export |
 | Book search | Works | Mostly works |
 | Goodreads lookup and fetching covers | Works | Not on a plain host. Uploading your own cover always works |
-| Where it can sit | Anywhere Vercel serves it | The top of an address, not a subfolder |
+| Where it can sit | Any address your host gives it | The top of an address, not a subfolder |
 
 Choose the full site if you'll update often. The zip suits a shelf you set and forget, or anyone who'd rather skip GitHub.
 
