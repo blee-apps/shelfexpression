@@ -1,0 +1,7 @@
+# Netlify settings. Import the repo in Netlify and these fill themselves in.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"

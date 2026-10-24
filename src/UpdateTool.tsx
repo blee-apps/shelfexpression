@@ -700,7 +700,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     try {
       const result = await publish({ token, json, baseJson, message, toTest: publishToTest, onStep: text => setPublishStatus({ text }) });
       if (!publishToTest) { setBaseJson(json); markCoversPublished(); clearDraft(); }
-      pollDeploy(result.commit);
+      pollDeploy(result.commit, result.branch === SITE.github.branch);
       setPublishStatus({
         text: publishToTest
           ? `Published to the test branch (${result.branch}).`
@@ -772,16 +772,16 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 
   const discardDraft = () => { clearDraft(); setDraftOffer(null); };
 
-  // After publishing, follow the Vercel build for that commit.
-  const pollDeploy = (sha: string) => {
+  // After publishing, follow the build for that commit.
+  const pollDeploy = (sha: string, live: boolean) => {
     const token = getToken();
     const started = Date.now();
     setDeploy({ state: 'waiting' });
     const tick = async () => {
       let d: Deploy = { state: 'waiting' };
-      try { d = await deployStatus(token, sha); } catch {}
+      try { d = await deployStatus(token, sha, live); } catch {}
       setDeploy(d);
-      const done = d.state === 'ready' || d.state === 'failed' || d.state === 'no-access';
+      const done = d.state === 'ready' || d.state === 'failed' || (d.state === 'no-access' && !live);
       if (!done && Date.now() - started < 8 * 60 * 1000) setTimeout(tick, 6000);
     };
     setTimeout(tick, 4000);
@@ -971,13 +971,13 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               : hasChanges ? 'Unpublished changes, saved on this device.' : 'No changes to publish.'}
             {deploy && publishStatus?.result && (
               <span style={{ display: 'block', color: deploy.state === 'failed' ? '#b42318' : deploy.state === 'ready' ? '#1e7a3c' : '#888' }}>
-                {deploy.state === 'waiting' && <><span className="admin-spinner" style={{ width: 9, height: 9, marginRight: 5, verticalAlign: -1 }} />Waiting for Vercel…</>}
-                {deploy.state === 'building' && <><span className="admin-spinner" style={{ width: 9, height: 9, marginRight: 5, verticalAlign: -1 }} />Vercel is building…</>}
+                {(deploy.state === 'waiting' || (deploy.state === 'no-access' && publishStatus.result.branch === SITE.github.branch)) && <><span className="admin-spinner" style={{ width: 9, height: 9, marginRight: 5, verticalAlign: -1 }} />Waiting for the build…</>}
+                {deploy.state === 'building' && <><span className="admin-spinner" style={{ width: 9, height: 9, marginRight: 5, verticalAlign: -1 }} />Building…</>}
                 {deploy.state === 'ready' && (publishStatus.result.branch === SITE.github.branch
                   ? <>Live now. <a href={window.location.origin} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Open the site</a></>
                   : <>Preview ready. {deploy.url && <a href={deploy.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Open the preview</a>}</>)}
-                {deploy.state === 'failed' && <>Vercel's build failed. {deploy.url && <a href={deploy.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>See why</a>}</>}
-                {deploy.state === 'no-access' && <>To see build progress here, give your key Deployments: Read-only.</>}
+                {deploy.state === 'failed' && <>The build failed. {deploy.url && <a href={deploy.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>See why</a>}</>}
+                {deploy.state === 'no-access' && publishStatus.result.branch !== SITE.github.branch && <>To see build progress here, give your key Deployments: Read-only.</>}
               </span>
             )}
           </span>

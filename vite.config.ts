@@ -67,9 +67,10 @@ const siteFilesPlugin = {
     const files = entries
       .filter(e => e.isFile())
       .map(e => `${e.parentPath ?? (e as any).path}/${e.name}`.slice(dir.length + 1).split('\\').join('/'))
-      .filter(f => !f.startsWith('covers/') && !f.startsWith('.') && !f.includes('/.') && !f.endsWith('.map') && f !== 'site-files.json')
+      .filter(f => !f.startsWith('covers/') && !f.startsWith('.') && !f.includes('/.') && !f.endsWith('.map') && f !== 'site-files.json' && f !== 'version.json')
       .sort();
     await writeFile(`${dir}/site-files.json`, JSON.stringify({ files }, null, 2) + '\n');
+    await writeFile(`${dir}/version.json`, JSON.stringify({ commit: detectCommit() }) + '\n');
   },
 };
 
@@ -163,16 +164,27 @@ const exportPlugin = {
 };
 
 // The GitHub repo this copy comes from, for when content/site.ts leaves
-// github.repo empty. On Vercel it's the repo being deployed; on your
-// computer it's the repo you cloned. Anything else (or not GitHub) gives ''.
+// github.repo empty. On Vercel or Netlify it's the repo being deployed; on
+// your computer it's the repo you cloned. Anything else (or not GitHub) gives ''.
+const githubRepoFromUrl = (url: string) =>
+  url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1] ?? '';
 const detectRepo = (): string => {
-  const { VERCEL_GIT_PROVIDER, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG } = process.env;
+  const { VERCEL_GIT_PROVIDER, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG, NETLIFY, REPOSITORY_URL } = process.env;
   if (VERCEL_GIT_REPO_OWNER && VERCEL_GIT_REPO_SLUG)
     return !VERCEL_GIT_PROVIDER || VERCEL_GIT_PROVIDER === 'github' ? `${VERCEL_GIT_REPO_OWNER}/${VERCEL_GIT_REPO_SLUG}` : '';
+  if (NETLIFY && REPOSITORY_URL) return githubRepoFromUrl(REPOSITORY_URL);
   try {
-    const url = execSync('git remote get-url origin', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    return url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1] ?? '';
+    return githubRepoFromUrl(execSync('git remote get-url origin', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim());
   } catch { return ''; }
+};
+
+// The commit this build came from, written to dist/version.json. After you
+// publish, the editor watches it to tell when the new version is live, on
+// any host.
+const detectCommit = (): string => {
+  const { VERCEL_GIT_COMMIT_SHA, COMMIT_REF } = process.env;
+  if (VERCEL_GIT_COMMIT_SHA || COMMIT_REF) return (VERCEL_GIT_COMMIT_SHA || COMMIT_REF)!;
+  try { return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return ''; }
 };
 
 export default defineConfig({
