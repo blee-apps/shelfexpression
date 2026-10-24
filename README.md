@@ -120,6 +120,22 @@ vite.config.ts            Local-only helpers for the editor (saving covers and b
 
 Fonts (DM Serif Text and Manrope) are self-hosted, so no requests go to Google.
 
+## Full site or exported zip?
+
+Both look identical to visitors. The difference is how you edit them.
+
+| | Full site (GitHub + Vercel) | Exported zip (any host) |
+|---|---|---|
+| Where your books live | `content/` in your repo, with history | Baked into the zip's `index.html` |
+| Editing | The editor, unlocked with your GitHub key | The editor, if you included it, with no key |
+| Going live | **Publish**, or **Test preview** first | **Export site** again and upload the new folder |
+| Unsaved changes | Kept as a draft on your device | Lost unless you export |
+| Book search | Works | Mostly works |
+| Goodreads lookup and fetching covers | Works | Not on a plain host. Uploading your own cover always works |
+| Where it can sit | Anywhere Vercel serves it | The top of an address, not a subfolder |
+
+Choose the full site if you'll update often. The zip suits a shelf you set and forget, or anyone who'd rather skip GitHub.
+
 ## Credits
 
 Made by Brandon Lee ([sangsara.net](https://sangsara.net)). MIT licensed, so use it, change it and make it your own.
