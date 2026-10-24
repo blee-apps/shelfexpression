@@ -188,7 +188,7 @@ const detectCommit = (): string => {
 };
 
 export default defineConfig({
-  define: { __SHELF_REPO__: JSON.stringify(detectRepo()) },
+  define: { __SHELF_REPO__: JSON.stringify(detectRepo()), __SHELF_COMMIT__: JSON.stringify(detectCommit()) },
   plugins: [react(), coversPlugin, siteFilesPlugin, exportPlugin, {
     name: 'cover-upload',
     configureServer(server) {

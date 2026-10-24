@@ -167,6 +167,29 @@ const COVER_FILE = /^content\/covers\/[^/]+\.(jpg|jpeg|png|webp)$/i;
 
 export type PublishResult = { commit: string; url: string; branch: string; added: number; deleted: number };
 
+// The commit this copy of the site was built from ('' when unknown).
+const BUILD_COMMIT: string = typeof __SHELF_COMMIT__ === 'string' ? __SHELF_COMMIT__ : '';
+
+// Which commit a publish builds on. Normally the live branch. But when this
+// editor is running from a version that isn't on the live branch yet (a pull
+// request preview, say), a Test preview builds on that version instead, so
+// the preview has the code that understands the new shelf. Publishing live
+// from such a version is refused: the live code might not understand it.
+async function publishBase(
+  gh: (path: string) => Promise<Response>, liveHead: string, toTest: boolean,
+): Promise<string> {
+  if (!BUILD_COMMIT || BUILD_COMMIT === liveHead) return liveHead;
+  const { branch: liveBranch } = SITE.github;
+  const r = await gh(`compare/${liveHead}...${BUILD_COMMIT}`);
+  if (!r.ok) return liveHead; // can't tell (e.g. a local build that was never pushed)
+  const { status } = await r.json() as { status?: string };
+  if (status === 'behind' || status === 'identical') return liveHead;
+  if (!toTest) {
+    throw new PublishError(`This editor is from a version that isn't on ${liveBranch} yet, so publishing live could break the site. Use Test preview, or merge the new version first.`);
+  }
+  return BUILD_COMMIT;
+}
+
 // Makes one commit with the new books.json, the new cover files, and with
 // covers no book uses any more removed. `baseJson` is the books.json the
 // editor started from: if the live branch has a different one (changed from
@@ -202,13 +225,20 @@ export async function publish(opts: {
   // 1. Where the live branch is now.
   onStep('Checking GitHub…');
   const ref = await ok(await gh(`git/ref/heads/${liveBranch}`), 'read the live branch');
-  const parent: string = ref.object.sha;
+  const liveHead: string = ref.object.sha;
+  const parent = await publishBase(gh, liveHead, toTest);
   const parentCommit = await ok(await gh(`git/commits/${parent}`), 'read the latest commit');
   const tree = await ok(await gh(`git/trees/${parentCommit.tree.sha}?recursive=1`), 'read the files');
   const files: { path: string; sha: string; type: string }[] = tree.tree;
 
-  // 2. Stop if the shelf changed since the editor loaded it.
-  const booksFile = files.find(f => f.path === 'content/books.json');
+  // 2. Stop if the shelf changed since the editor loaded it (the editor
+  // loads it from the live branch).
+  let liveFiles = files;
+  if (parent !== liveHead) {
+    const liveCommit = await ok(await gh(`git/commits/${liveHead}`), 'read the latest commit');
+    liveFiles = (await ok(await gh(`git/trees/${liveCommit.tree.sha}?recursive=1`), 'read the files')).tree;
+  }
+  const booksFile = liveFiles.find(f => f.path === 'content/books.json');
   if (booksFile) {
     const blob = await ok(await gh(`git/blobs/${booksFile.sha}`), 'read books.json');
     if (normalize(fromBase64Utf8(blob.content)) !== normalize(baseJson)) {
@@ -277,7 +307,7 @@ export async function publishSiteDetails(opts: { token: string; site: SiteDetail
     return r;
   };
   const ref = await (await gh(`git/ref/heads/${liveBranch}`, undefined, 'read the live branch')).json();
-  const parent: string = ref.object.sha;
+  const parent = await publishBase(p => gh(p, undefined, 'compare versions').catch(() => new Response(null, { status: 500 })), ref.object.sha, toTest);
   const parentCommit = await (await gh(`git/commits/${parent}`, undefined, 'read the latest commit')).json();
   const file = await (await gh(`contents/content/site.ts?ref=${parent}`, undefined, 'read content/site.ts')).json();
   const next = updateSiteFile(fromBase64Utf8(file.content), site);
