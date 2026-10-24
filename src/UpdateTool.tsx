@@ -1008,17 +1008,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       )}
 
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {/* SHARE + HOST IT YOURSELF: side by side when there's room, stacked on a phone */}
+        {/* SITE DETAILS, HOST IT YOURSELF, SHARE: side by side when there's room, stacked on a phone */}
         {!shareMode && (
           <div className="admin-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12, marginBottom: 16 }}>
-            <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #fafafa, #f3f1ee)' }}>
-              <Share2 size={18} style={{ color: '#555', flexShrink: 0 }} />
-              <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Share your favorites</div>
-                <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
-              </div>
-              <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Create image</button>
-            </div>
             <div className="admin-site-card" style={{ ...cardStyle, background: '#fafafa' }}>
               <PenLine size={18} style={{ color: '#555', flexShrink: 0 }} />
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -1034,6 +1026,14 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                 <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Download your shelf as a website for any web host. No GitHub needed.</div>
               </div>
               <button onClick={() => setStaticOpen(true)} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Export site</button>
+            </div>
+            <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #fafafa, #f3f1ee)' }}>
+              <Share2 size={18} style={{ color: '#555', flexShrink: 0 }} />
+              <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Share your favorites</div>
+                <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>Pick up to 12 books and make an image for Instagram Stories or posts.</div>
+              </div>
+              <button onClick={() => { setShareMode(true); setSelectedForShare(new Set()); }} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>Create image</button>
             </div>
           </div>
         )}
