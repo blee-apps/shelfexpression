@@ -1,6 +1,8 @@
 // Writes the export sheet's site details back into content/site.ts, so a
-// shelf made locally keeps them. Only name, url, title, subtitle and nav
-// change; everything else in the file (comments, github, guestMode) stays.
+// shelf made locally keeps them. Only name, url, title, subtitle, nav and
+// (when given) github.repo change; everything else in the file (comments,
+// branches, guestMode) stays. Runs on the dev server and, for Save on the
+// live site, in the browser.
 
 export type SiteDetails = {
   name: string;
@@ -8,6 +10,7 @@ export type SiteDetails = {
   title: string;
   subtitle: string; // `{count}` stands for the number of books
   nav: { label: string; href: string; current?: boolean }[];
+  repo?: string; // 'owner/name'; left alone when undefined
 };
 
 // Non-ASCII characters are written as \u escapes, like the rest of the file.
@@ -28,6 +31,7 @@ export function updateSiteFile(src: string, d: SiteDetails): string | null {
   swap(/^(\s*name:\s*)'(?:[^'\\\n]|\\.)*'/m, quote(d.name));
   swap(/^(\s*url:\s*)'(?:[^'\\\n]|\\.)*'/m, quote(d.url));
   swap(/^(\s*title:\s*)'(?:[^'\\\n]|\\.)*'/m, quote(d.title));
+  if (d.repo !== undefined) swap(/^(\s*github:\s*\{[^}\n]*?\brepo:\s*)'(?:[^'\\\n]|\\.)*'/m, quote(d.repo));
   swap(/^(\s*subtitle:\s*\(count(?::\s*number)?\)\s*=>\s*)`(?:[^`\\]|\\.)*`/m, template(d.subtitle));
   if (out === null) return null;
 

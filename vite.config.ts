@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { writeFile, readFile, cp, readdir, rm } from 'fs/promises'
 import { existsSync } from 'fs'
+import { execSync } from 'child_process'
 import { resolve } from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { goodreadsHandler, coverHandler } from './server/lookup.js'
@@ -144,10 +145,38 @@ const exportPlugin = {
         sendJson(res, 500, { ok: false, error: err.message });
       }
     });
+    // Save in the Site details sheet: writes content/site.ts.
+    server.middlewares.use('/api/save-site', async (req: IncomingMessage, res: ServerResponse) => {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
+      if (!fromLocalhost(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      try {
+        const site = JSON.parse(await readBody(req)) as SiteDetails;
+        const next = updateSiteFile(await readFile('content/site.ts', 'utf8'), site);
+        if (next === null) return sendJson(res, 200, { ok: false, error: 'content/site.ts looks hand-edited, so it was left alone. Edit it there instead.' });
+        await quietWrite('content/site.ts', next);
+        sendJson(res, 200, { ok: true });
+      } catch (err: any) {
+        sendJson(res, 500, { ok: false, error: err.message });
+      }
+    });
   },
 };
 
+// The GitHub repo this copy comes from, for when content/site.ts leaves
+// github.repo empty. On Vercel it's the repo being deployed; on your
+// computer it's the repo you cloned. Anything else (or not GitHub) gives ''.
+const detectRepo = (): string => {
+  const { VERCEL_GIT_PROVIDER, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG } = process.env;
+  if (VERCEL_GIT_REPO_OWNER && VERCEL_GIT_REPO_SLUG)
+    return !VERCEL_GIT_PROVIDER || VERCEL_GIT_PROVIDER === 'github' ? `${VERCEL_GIT_REPO_OWNER}/${VERCEL_GIT_REPO_SLUG}` : '';
+  try {
+    const url = execSync('git remote get-url origin', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)?.[1] ?? '';
+  } catch { return ''; }
+};
+
 export default defineConfig({
+  define: { __SHELF_REPO__: JSON.stringify(detectRepo()) },
   plugins: [react(), coversPlugin, siteFilesPlugin, exportPlugin, {
     name: 'cover-upload',
     configureServer(server) {

@@ -22,7 +22,7 @@ export type TokenCheck = { ok: true; expires?: string } | { ok: false; error: st
 // public repo, so the check is for write access, which only the owner's key has.
 export async function checkToken(token: string): Promise<TokenCheck> {
   if (!token.trim()) return { ok: false, error: 'Paste your GitHub key first.' };
-  if (!SITE.github.repo) return { ok: false, error: 'Set github.repo in content/site.ts first.' };
+  if (!SITE.github.repo) return { ok: false, error: 'Add your GitHub repo in Site details first.' };
   try {
     const r = await fetch(`https://api.github.com/repos/${SITE.github.repo}`, { headers: githubHeaders(token.trim()) });
     if (r.status === 401) return { ok: false, error: 'GitHub didn\u2019t accept this key. It may have expired or been deleted.' };

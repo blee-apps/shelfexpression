@@ -2,6 +2,7 @@
 // book list and any new cover files. Vercel sees the commit and redeploys.
 import { SITE } from './shelfData';
 import { githubHeaders } from './github';
+import { updateSiteFile, SiteDetails } from '../server/siteFile';
 
 // --- Covers waiting to be published -------------------------------------
 // A cover picked or uploaded in the editor lives in the browser until you
@@ -247,6 +248,37 @@ export async function publish(opts: {
   }
 
   return { commit: commit.sha, url: commit.html_url, branch: target, added: newCovers.length, deleted: orphans.length };
+}
+
+// Save in the Site details sheet on the live site: one commit that changes
+// only the site details in content/site.ts. Books publish separately.
+export async function publishSiteDetails(opts: { token: string; site: SiteDetails; toTest: boolean }): Promise<PublishResult> {
+  const { token, site, toTest } = opts;
+  const { repo, branch: liveBranch, testBranch } = SITE.github;
+  const target = toTest ? testBranch : liveBranch;
+  const gh = async (path: string, init?: { method?: string; body?: unknown }, what = 'reach GitHub') => {
+    const r = await fetch(`https://api.github.com/repos/${repo}/${path}`, {
+      method: init?.method || 'GET',
+      headers: { ...githubHeaders(token), ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+    });
+    if (r.status === 401) throw new PublishError('GitHub didn\u2019t accept your key. It may have expired. Forget the key and paste a new one.', 'auth');
+    if (r.status === 403) throw new PublishError('Your key can\u2019t write to the repo. Give it Contents: Read and write.', 'auth');
+    if (!r.ok && !(r.status === 422 && init?.method === 'PATCH')) throw new PublishError(`Couldn\u2019t ${what} (${r.status}).`);
+    return r;
+  };
+  const ref = await (await gh(`git/ref/heads/${liveBranch}`, undefined, 'read the live branch')).json();
+  const parent: string = ref.object.sha;
+  const parentCommit = await (await gh(`git/commits/${parent}`, undefined, 'read the latest commit')).json();
+  const file = await (await gh(`contents/content/site.ts?ref=${parent}`, undefined, 'read content/site.ts')).json();
+  const next = updateSiteFile(fromBase64Utf8(file.content), site);
+  if (next === null) throw new PublishError('content/site.ts in your repo looks hand-edited, so it was left alone. Edit it on GitHub instead.');
+  const tree = await (await gh('git/trees', { method: 'POST', body: { base_tree: parentCommit.tree.sha, tree: [{ path: 'content/site.ts', mode: '100644', type: 'blob', content: next }] } }, 'prepare the commit')).json();
+  const commit = await (await gh('git/commits', { method: 'POST', body: { message: 'Bookshelf: update site details', tree: tree.sha, parents: [parent] } }, 'make the commit')).json();
+  const update = await gh(`git/refs/heads/${target}`, { method: 'PATCH', body: { sha: commit.sha, force: toTest } }, 'update the branch');
+  if (update.status === 422 && toTest) await gh('git/refs', { method: 'POST', body: { ref: `refs/heads/${target}`, sha: commit.sha } }, 'create the test branch');
+  else if (update.status === 422) throw new PublishError('Something else was published to GitHub just now. Try again.', 'stale');
+  return { commit: commit.sha, url: commit.html_url, branch: target, added: 0, deleted: 0 };
 }
 
 // After publishing to the live branch, the waiting covers are on GitHub.

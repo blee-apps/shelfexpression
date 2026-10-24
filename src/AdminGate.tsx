@@ -77,7 +77,7 @@ export default function AdminGate({ onClose, books }: Props) {
             <p style={{ fontSize: '0.82rem', color: '#666', lineHeight: 1.5, margin: '0 0 14px' }}>
               {SITE.github.repo
                 ? <>Paste a GitHub fine-grained key with access to <b>{SITE.github.repo}</b>. It stays on this device.</>
-                : <>To edit on the live site, first set <b>github.repo</b> in <code>content/site.ts</code> to this site’s GitHub repo.</>}
+                : <>This site doesn’t know its GitHub repo yet. Open the editor on your computer (<code>npm run dev</code>) and add it in <b>Site details</b>.</>}
             </p>
             {SITE.github.repo && <form onSubmit={e => { e.preventDefault(); unlock(); }}>
               <input type="password" value={token} onChange={e => setToken(e.target.value)} autoFocus
