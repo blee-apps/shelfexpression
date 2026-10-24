@@ -1,3 +1,4 @@
+import { BOOK_ASPECT } from '../decor';
 // Draws the share images: Instagram-ready pictures of books you pick.
 // Everything is drawn on a canvas at full size (1080 px wide).
 
@@ -155,16 +156,12 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, 
   ctx.restore();
 }
 
-const imgRatio = (b: ShareBook) => (b.img && b.img.naturalHeight ? b.img.naturalWidth / b.img.naturalHeight : 2 / 3);
-// How wide an item is for each unit of row height. A decoration is shorter
-// than the row, so it takes less width.
-const ratio = (b: ShareBook) => imgRatio(b) * (b.decor ?? 1);
+const imgRatio = (b: ShareBook) => (b.img && b.img.naturalHeight ? b.img.naturalWidth / b.img.naturalHeight : BOOK_ASPECT);
 
-// A decoration standing with its base at y + h (h is the row's book height).
+// A decoration drawn in the box x, y, w, h (its base at y + h).
 // Its shadows follow its outline: a soft one behind, and a tight one where it
 // touches the surface.
-function drawDecor(ctx: CanvasRenderingContext2D, b: ShareBook, x: number, y: number, rowH: number, p: Palette, wall: boolean) {
-  const h = rowH * (b.decor ?? 1), w = h * imgRatio(b), top = y + rowH - h;
+function drawDecor(ctx: CanvasRenderingContext2D, b: ShareBook, x: number, top: number, w: number, h: number, p: Palette, wall: boolean) {
   const img = b.img;
   const draw: CoverDraw = (c, dx, dy, dw, dh) => {
     c.save();
@@ -191,40 +188,77 @@ function drawDecor(ctx: CanvasRenderingContext2D, b: ShareBook, x: number, y: nu
   if (!captured(img, x, top, w, h, draw)) draw(ctx, x, top, w, h);
 }
 
-// Splits covers into rows where every cover in a row is the same height and
-// the row exactly fills the width, then picks the row count that makes the
-// covers biggest within the box.
-function justify(books: ShareBook[], boxW: number, boxH: number, gap: number, rowGap: number, extraPerRow: number, maxRowH: number) {
-  let best: { rows: { items: number[]; h: number; w: number }[]; area: number } | null = null;
+// Every item stands in a slot the shape of a paperback (BOOK_ASPECT), and every
+// slot in the image is the same size, so books keep their sizes relative to
+// each other whatever is next to them: a decoration, or empty space at the end
+// of a short row. A book fits inside its slot by its own shape (a wide cover
+// fills the width and is shorter, a tall narrow one fills the height and is
+// narrower) and stands at the bottom, centered. A decoration stands at its
+// height next to a paperback; one wider than a slot takes two.
+type Slotted = { k: number; span: number };
+type SlotRow = { items: Slotted[]; cols: number };
+type SlotLayout = { rows: SlotRow[]; slotW: number; slotH: number; cols: number };
+
+const decorWidth = (b: ShareBook, slotH: number) => slotH * (b.decor ?? 1) * imgRatio(b);
+// How many slots an item takes. Decided from slot proportions, so it doesn't
+// depend on the final size.
+const spanOf = (b: ShareBook, cols: number) => (b.decor && cols >= 2 && decorWidth(b, 1 / BOOK_ASPECT) > 1 ? 2 : 1);
+
+function packRows(books: ShareBook[], cols: number): SlotRow[] {
+  const rows: SlotRow[] = [];
+  let row: SlotRow = { items: [], cols: 0 };
+  books.forEach((b, k) => {
+    const span = spanOf(b, cols);
+    if (row.cols + span > cols && row.items.length) { rows.push(row); row = { items: [], cols: 0 }; }
+    row.items.push({ k, span });
+    row.cols += span;
+  });
+  if (row.items.length) rows.push(row);
+  return rows;
+}
+
+// Picks the number of columns that makes the slots (and so the books) biggest
+// within the box.
+function slotLayout(books: ShareBook[], boxW: number, boxH: number, gap: number, rowGap: number, extraPerRow: number, maxSlotH: number): SlotLayout {
+  let best: SlotLayout | null = null;
   const n = books.length;
-  for (let r = 1; r <= Math.min(n, 6); r++) {
-    const base = Math.floor(n / r), extra = n % r;
-    const rows: { items: number[]; h: number; w: number }[] = [];
-    let idx = 0;
-    for (let i = 0; i < r; i++) {
-      const count = base + (i < extra ? 1 : 0);
-      const items = Array.from({ length: count }, () => idx++);
-      const sumAr = items.reduce((s, k) => s + ratio(books[k]), 0);
-      const h = Math.min((boxW - gap * (count - 1)) / sumAr, maxRowH);
-      rows.push({ items, h, w: h * sumAr + gap * (count - 1) });
-    }
-    const totalH = rows.reduce((s, row) => s + row.h, 0);
-    const fixed = (r - 1) * rowGap + r * extraPerRow;
-    const scale = Math.min(1, (boxH - fixed) / totalH);
-    if (scale <= 0) continue;
-    rows.forEach(row => {
-      const sumAr = row.items.reduce((s, k) => s + ratio(books[k]), 0);
-      row.h *= scale;
-      row.w = row.h * sumAr + gap * (row.items.length - 1);
-    });
-    // Score by cover area, nudged toward evenly sized rows.
-    const area = rows.reduce((s, row) => s + row.h * (row.w - gap * (row.items.length - 1)), 0);
-    const hs = rows.map(x => x.h);
-    const evenness = Math.min(...hs) / Math.max(...hs);
-    const score = area * (0.75 + 0.25 * evenness);
-    if (!best || score > best.area) best = { rows, area: score };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = packRows(books, cols);
+    const used = Math.max(...rows.map(r => r.cols));
+    if (used < cols) break; // more columns than any row fills: no bigger
+    const r = rows.length;
+    const byWidth = (boxW - gap * (cols - 1)) / cols;
+    const byHeight = ((boxH - (r - 1) * rowGap - r * extraPerRow) / r) * BOOK_ASPECT;
+    const slotW = Math.min(byWidth, byHeight, maxSlotH * BOOK_ASPECT);
+    if (slotW <= 0) continue;
+    // Prefer bigger slots; between near-equal ones, the one with fewer empty slots.
+    const empty = (l: SlotLayout) => l.rows.length * l.cols - l.rows.reduce((s, x) => s + x.cols, 0);
+    const cand = { rows, slotW, slotH: slotW / BOOK_ASPECT, cols };
+    if (!best || slotW > best.slotW * 1.02 || (slotW > best.slotW * 0.98 && empty(cand) < empty(best))) best = cand;
   }
-  return best!.rows;
+  return best!;
+}
+
+// Where each item in a row goes: rows are centered, each item in its slot(s).
+// Returns the item's slot box and the drawn box inside it.
+function placeRow(books: ShareBook[], row: SlotRow, L: SlotLayout, boxX: number, boxW: number, y: number, gap: number) {
+  const rowW = row.cols * L.slotW + (row.cols - 1) * gap;
+  let x = boxX + (boxW - rowW) / 2;
+  return row.items.map(({ k, span }) => {
+    const b = books[k];
+    const sw = span * L.slotW + (span - 1) * gap;
+    let w: number, h: number;
+    if (b.decor) {
+      h = L.slotH * b.decor; w = h * imgRatio(b);
+      if (w > sw) { h *= sw / w; w = sw; } // never wider than its slots
+    } else {
+      const ar = imgRatio(b);
+      w = Math.min(L.slotW, L.slotH * ar); h = w / ar;
+    }
+    const item = { k, b, slotX: x, slotW: sw, x: x + (sw - w) / 2, y: y + L.slotH - h, w, h };
+    x += sw + gap;
+    return item;
+  });
 }
 
 // --- Main -----------------------------------------------------------------
@@ -290,31 +324,30 @@ function drawGrid(ctx: CanvasRenderingContext2D, books: ShareBook[], o: ShareOpt
     const t = Math.max(17, Math.min(32, rowH * 0.075));
     return { t, a: t * 0.82, h: labels ? t * 1.25 + t * 0.82 * 1.3 + 22 : 0 };
   };
-  let rows = justify(books, box.w, box.h, gap, gap + 6, labelFor(400).h, box.h * 0.62);
-  const lab = labelFor(rows[0].h);
-  rows = justify(books, box.w, box.h, gap, gap + 6, lab.h, box.h * 0.62);
+  let L = slotLayout(books, box.w, box.h, gap, gap + 6, labelFor(400).h, box.h * 0.62);
+  const lab = labelFor(L.slotH);
+  L = slotLayout(books, box.w, box.h, gap, gap + 6, lab.h, box.h * 0.62);
   const rowGap = gap + 6;
-  const total = rows.reduce((s, r) => s + r.h + lab.h, 0) + rowGap * (rows.length - 1);
+  const total = L.rows.length * (L.slotH + lab.h) + rowGap * (L.rows.length - 1);
   let y = box.y + (box.h - total) / 2;
-  for (const row of rows) {
-    let x = box.x + (box.w - row.w) / 2;
-    for (const k of row.items) {
-      const b = books[k];
-      const w = row.h * ratio(b);
-      if (b.decor) drawDecor(ctx, b, x, y, row.h, p, false);
-      else drawCover(ctx, b.img, x, y, w, row.h, p);
-      if (labels && !b.decor) {
+  for (const row of L.rows) {
+    for (const it of placeRow(books, row, L, box.x, box.w, y, gap)) {
+      const b = it.b;
+      if (b.decor) { drawDecor(ctx, b, it.x, it.y, it.w, it.h, p, false); continue; }
+      drawCover(ctx, b.img, it.x, it.y, it.w, it.h, p);
+      if (labels) {
+        // From the cover's left edge to its slot's right edge.
+        const lw = it.slotX + it.slotW - it.x;
         ctx.textAlign = 'left';
         setFont(ctx, lab.t, SANS, 600);
         ctx.fillStyle = p.text;
-        ctx.fillText(ellipsize(ctx, b.title, w), x, y + row.h + 20 + lab.t * 0.9);
+        ctx.fillText(ellipsize(ctx, b.title, lw), it.x, y + L.slotH + 20 + lab.t * 0.9);
         setFont(ctx, lab.a, SANS, 400);
         ctx.fillStyle = p.sub;
-        ctx.fillText(ellipsize(ctx, b.author, w), x, y + row.h + 20 + lab.t * 1.25 + lab.a * 0.95);
+        ctx.fillText(ellipsize(ctx, b.author, lw), it.x, y + L.slotH + 20 + lab.t * 1.25 + lab.a * 0.95);
       }
-      x += w + gap;
     }
-    y += row.h + lab.h + rowGap;
+    y += L.slotH + lab.h + rowGap;
   }
 }
 
@@ -326,8 +359,10 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
   const LIP_MAX = 40, below = 44; // deepest lip, then room for its shadow
   const inner = { ...box, x: box.x + 18, w: box.w - 36 };
   const reserve = LIP_MAX + below;
-  const rows = justify(books, inner.w, inner.h, gap, reserve, 0, inner.h * 0.55);
-  const total = rows.reduce((s, r) => s + r.h, 0) + reserve * rows.length - below;
+  // Every shelf is the same height apart: a paperback's height plus the shelf.
+  const L = slotLayout(books, inner.w, inner.h, gap, reserve, 0, inner.h * 0.55);
+  const rows = L.rows;
+  const total = (L.slotH + reserve) * rows.length - below;
   let y = inner.y + (inner.h - total) / 2;
 
   const dark = p.dark;
@@ -351,9 +386,9 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
 
   const sx = xL - 6, sw = xR + TRACK + 6 - sx;
   for (const row of rows) {
-    const lip = Math.round(Math.min(LIP_MAX, Math.max(22, row.h * 0.08)));
+    const lip = Math.round(Math.min(LIP_MAX, Math.max(22, L.slotH * 0.08)));
     const surface = Math.round(lip * 0.4);
-    const top = y + row.h - Math.round(surface * 0.55);
+    const top = y + L.slotH - Math.round(surface * 0.55);
     const face = top + surface;
 
     // Soft shadow on the wall under the shelf.
@@ -384,11 +419,9 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
     ctx.fillStyle = fg;
     ctx.fillRect(sx, face, sw, lip);
 
-    let x = inner.x + (inner.w - row.w) / 2;
-    for (const k of row.items) {
-      const w = row.h * ratio(books[k]);
-      const img = books[k].img;
-      if (books[k].decor) { drawDecor(ctx, books[k], x, y, row.h, p, true); x += w + gap; continue; }
+    for (const it of placeRow(books, row, L, inner.x, inner.w, y, gap)) {
+      const img = it.b.img;
+      if (it.b.decor) { drawDecor(ctx, it.b, it.x, it.y, it.w, it.h, p, true); continue; }
       // A tight contact shadow where it stands, and a soft one on the wall
       // behind (up and to the side, so the book doesn't float over the lip).
       const standing: CoverDraw = (c, bx, by, bw, bh) => {
@@ -403,10 +436,9 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
         else { c.fillStyle = 'rgba(128,128,128,0.25)'; c.fillRect(bx, by, bw, bh); }
         c.restore();
       };
-      if (!captured(img, x, y, w, row.h, standing)) standing(ctx, x, y, w, row.h);
-      x += w + gap;
+      if (!captured(img, it.x, it.y, it.w, it.h, standing)) standing(ctx, it.x, it.y, it.w, it.h);
     }
-    y += row.h + reserve;
+    y += L.slotH + reserve;
   }
 }
 
@@ -467,7 +499,7 @@ function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOpt
   const blockH = coverH + 64 + t.h;
   const y0 = box.y + (box.h - blockH) / 2;
   const cx = left ? box.x : box.x + (box.w - cw) / 2;
-  if (book.decor) drawDecor(ctx, { ...book, decor: 1 }, cx, y0, coverH, p, false);
+  if (book.decor) drawDecor(ctx, book, cx, y0, cw, coverH, p, false);
   else drawCover(ctx, book.img, cx, y0, cw, coverH, p);
   drawText(t, left ? box.x : W / 2, y0 + coverH + 64, left ? 'left' : 'center');
 }

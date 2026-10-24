@@ -387,6 +387,23 @@ const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
   </div>
 );
 
+// A book's place on the Vitsoe shelf. Every slot is as tall as a paperback at
+// the slot's width, so all rows are the same height whatever the covers are.
+// The book fits inside it by its own shape (like object-fit: contain) and stands
+// on the shelf, centered: a wide cover fills the width and is shorter, a tall
+// narrow one fills the height and is narrower. The button is the cover's own
+// size, so the hover area and the rect the open animation starts from are the
+// cover, not the empty space above it.
+const ShelfSlot = ({ book, children }: { book: Book; children: (coverWidth: string) => React.ReactNode }) => {
+  const aspect = useBookAspectRatio(book);
+  const fit = Math.min(1, aspect / BOOK_ASPECT);
+  return (
+    <div className="vitsoe-slot" style={{ aspectRatio: BOOK_ASPECT }}>
+      {children(`${(fit * 100).toFixed(3)}%`)}
+    </div>
+  );
+};
+
 // The width of one slot in the books grid, and how many slots fit across.
 const useSlotSize = (gridRef: React.RefObject<HTMLDivElement | null>) => {
   const [size, setSize] = useState({ w: 0, cols: 0 });
@@ -979,6 +996,12 @@ export default function App() {
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
         /* Book hover effect — simulates picking a book off the shelf */
+        .vitsoe-slot {
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          width: 100%;
+        }
         .vitsoe-book-wrapper {
           position: relative;
         }
@@ -1219,12 +1242,13 @@ export default function App() {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
+                <ShelfSlot key={book.id} book={book}>{coverWidth => (
                 <button
                   type="button"
-                  key={book.id}
                   ref={el => { bookButtonRefs.current[book.id] = el; }}
                   aria-label={`${book.title} by ${book.author}`}
-                  className="vitsoe-book-wrapper block w-full p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100"
+                  style={{ width: coverWidth }}
+                  className="vitsoe-book-wrapper block shrink-0 p-0 bg-transparent border-0 text-left cursor-pointer rounded-xs focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gray-900 dark:focus-visible:outline-neutral-100"
                   onClick={(e) => handleSelect(book, e)}
                   onPointerEnter={(e) => {
                     // Lift for a mouse or trackpad (or pen), not for a finger: on phones a tap would leave it stuck.
@@ -1265,6 +1289,7 @@ export default function App() {
                     <DynamicCover book={book} />
                   </div>
                 </button>
+                )}</ShelfSlot>
               ) : (
                 <button
                   type="button"
