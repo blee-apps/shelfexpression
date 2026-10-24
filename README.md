@@ -19,36 +19,36 @@ Open the address it prints (usually http://localhost:5173).
 
 ### 2. Set your site details
 
-Open the editor with **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows and Linux), tap **Site details**, and fill in your site name, heading, the line under it and your menu links. **Save** writes them into `content/site.ts` for you. Your GitHub repo is filled in automatically.
+Open the editor with **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows and Linux) and tap **Site details**. Fill in your site name, heading, the line under it and your menu links. **Save** writes them into `content/site.ts` for you. Your GitHub repo is filled in automatically.
 
-### 3. Publish
+### 3. Choose a look
 
-Push your repo to GitHub and import it into [Vercel](https://vercel.com/new). The defaults just work: the build command is `npm run build` and the output folder is `dist`. Every push to `main` goes live.
-
-The site is fully static. Covers are saved in your repo, so it never depends on other websites at runtime. Netlify or any static host works too, but book search, Goodreads lookup and cover fetching on the live site use small Vercel functions in `api/`. Elsewhere, add books locally with `npm run dev`.
-
-### 4. Add your books with the editor
-
-Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and Linux. On a phone or tablet, tap the big heading five times. The same keystroke closes it.
-
-On the live site, it first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device. Anyone else who finds the editor can't get past this step. Once you're in, **Site details** saves straight to your live site too.
-
-1. Tap **Add book**, then type the title and author. The editor searches **Apple Books, Google Books and OpenLibrary** at once.
-2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
-3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
-4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**. Your changes are kept on the device as a draft until you publish, and you can restore or discard a draft the next time you open the editor.
-5. Tap **Publish**. The editor commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview.
-
-Locally (`npm run dev`), there's no key or Publish. Covers save straight into `content/covers/`, and **Save** at the top writes your books, look and share footer into `content/books.json`. Then commit and push. On the live site, Load and Generate sit under **Advanced: load or copy books.json** at the bottom of the editor.
-
-### 5. Choose a look
-
-Below the book grid in the editor are two switches. Pick one of each, then publish:
+In the editor, below the book grid, are two switches. Pick one of each:
 
 - **Shelf:** **Vitsoe**, a 606-style shelf with slim aluminum tracks and off-white steel shelves, where a hovered book leans from a corner and lifts as if you're picking it off the shelf. Or **Minimal**, covers on a flat background that grow slightly on hover.
 - **Mode:** **Light**, **Dark** (a near-black page, with a graphite shelf on a charcoal wall), or **Auto**, which follows each visitor's device setting.
 
-They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`) and `colorMode` (`light`, `dark` or `auto`), so you can also set them by hand.
+They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`) and `colorMode` (`light`, `dark` or `auto`).
+
+### 4. Add your books
+
+Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and Linux. On a phone or tablet, tap the big heading five times. The same keystroke closes it.
+
+1. Tap **Add book**, then type the title and author. The editor searches **Apple Books, Google Books and OpenLibrary** at once.
+2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
+3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
+4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**.
+5. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
+
+### 5. Publish
+
+When you're happy with it, commit and push your repo to GitHub, then import it into [Vercel](https://vercel.com/new). The defaults just work: the build command is `npm run build` and the output folder is `dist`. Every push to `main` goes live.
+
+The site is fully static. Covers are saved in your repo, so it never depends on other websites at runtime. Netlify or any static host works too, but book search, Goodreads lookup and cover fetching on the live site use small Vercel functions in `api/`. Elsewhere, keep adding books locally with `npm run dev`.
+
+From then on, you can also edit right on your live site. The editor first asks for a GitHub key that can write to your repo. Make one at GitHub → Settings → Developer settings → [Fine-grained tokens](https://github.com/settings/personal-access-tokens/new). Choose **only your shelf's repo**, and give it **Contents: Read and write**. Add **Deployments: Read-only** to see when your changes are live. The key stays on that device, and anyone else who finds the editor can't get past this step.
+
+On the live site, **Publish** takes the place of Save. It commits your books and covers to GitHub, and your host rebuilds the site. To try changes first, choose **Test preview** next to Publish. That sends them to the `editor-test` branch, for a Vercel preview. Until you publish, your changes are kept on the device as a draft, which you can restore or discard the next time you open the editor. **Site details** saves straight to your live site too, and the old copy-and-paste tools sit under **Advanced: load or copy books.json** at the bottom.
 
 ### 6. Share your favorites
 
