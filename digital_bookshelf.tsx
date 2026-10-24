@@ -372,10 +372,12 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
 // --- DECORATIONS ---
 // A decoration stands in a slot like a book, at its true size next to a
 // paperback, bottom-aligned on the shelf. It's just there: no hover, no click.
-const DecorOnShelf = ({ def, height, slotStyle }: {
-  def: DecorDef; height: number; slotStyle: React.CSSProperties;
+// Its slot is always as tall as a paperback, so a row with only decorations
+// in it keeps the standard shelf height.
+const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
+  def: DecorDef; height: number; slotHeight: number; slotStyle: React.CSSProperties;
 }) => (
-  <div className="decor-slot" aria-hidden="true" style={{ ...slotStyle, height }}>
+  <div className="decor-slot" aria-hidden="true" style={{ ...slotStyle, height: Math.max(height, slotHeight) }}>
     {height > 0 && (
       <div className="decor-item" style={{ width: height * def.aspect, height }}>
         <div className="decor-contact" style={{ left: `${def.base[0] * 100}%`, right: `${(1 - def.base[1]) * 100}%` }} />
@@ -951,7 +953,7 @@ export default function App() {
         if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
         else style.gridColumn = 'span 2';
       }
-      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotStyle={style} />;
+      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={slot.w / BOOK_ASPECT} slotStyle={style} />;
       col = (col + span) % cols;
     }
   }
