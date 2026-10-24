@@ -1098,7 +1098,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               <Plus size={15} /> Add book
             </button>
             <button onClick={() => setDecorPickFor(NEW_BOOK)} disabled={filledCount >= SLOT_COUNT} className="admin-add-decor"
-              title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} slots). Remove one first.` : 'Add a plant, a camera or another little thing to the shelf'}
+              title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} slots). Remove one first.` : 'Add a cactus, a camera or another little thing to the shelf'}
               style={{ ...btnStyle({ secondary: true }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
               <Flower2 size={15} /> Add decoration
             </button>

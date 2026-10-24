@@ -8,8 +8,8 @@ export interface Book {
   year: number; synopsis: string; gr: string; mult: number;
   coverUrl?: string;
   coverLocked?: boolean;
-  // A decoration (a plant, a camera…) standing in a slot instead of a book.
-  // In books.json it's just { "id", "type": "decor", "decor": "plant" }.
+  // A decoration (a cactus, a camera…) standing in a slot instead of a book.
+  // In books.json it's just { "id", "type": "decor", "decor": "cactus" }.
   type?: 'decor';
   decor?: string;
 }

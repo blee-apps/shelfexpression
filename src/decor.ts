@@ -17,14 +17,18 @@ export interface DecorDef {
 }
 
 export const DECOR_CATALOGUE: DecorDef[] = [
-  { id: 'plant', label: 'Plant', src: '/decor/plant.webp', height: 0.95, aspect: 906 / 800, base: [0.27, 0.62] },
+  { id: 'cactus', label: 'Cactus', src: '/decor/cactus.webp', height: 0.75, aspect: 356 / 800, base: [0.24, 0.76] },
   { id: 'snowglobe', label: 'Snow globe', src: '/decor/snowglobe.webp', height: 0.7, aspect: 630 / 800, base: [0.05, 0.95] },
   { id: 'figurine', label: 'Figure', src: '/decor/figurine.webp', height: 0.6, aspect: 315 / 800, base: [0.15, 0.85] },
   { id: 'speaker', label: 'Speaker', src: '/decor/speaker.webp', height: 0.48, aspect: 902 / 800, base: [0.22, 0.78] },
   { id: 'camera', label: 'Film camera', src: '/decor/camera.webp', height: 0.4, aspect: 1275 / 800, base: [0.03, 0.97] },
 ];
 
-export const decorById = (id?: string): DecorDef | undefined => DECOR_CATALOGUE.find(d => d.id === id);
+// Earlier names that now mean something else ("plant" became the cactus).
+const RENAMED: Record<string, string> = { plant: 'cactus' };
+
+export const decorById = (id?: string): DecorDef | undefined =>
+  DECOR_CATALOGUE.find(d => d.id === (id && RENAMED[id] || id));
 
 // The shape of the paperback decorations are sized against.
 export const BOOK_ASPECT = 2 / 3;

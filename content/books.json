@@ -22,11 +22,6 @@
       "coverUrl": "/covers/9781400078776.jpg"
     },
     {
-      "id": "3",
-      "type": "decor",
-      "decor": "plant"
-    },
-    {
       "id": "4",
       "isbn": "9780804172448",
       "title": "Station Eleven",
@@ -35,6 +30,11 @@
       "synopsis": "Twenty years after a pandemic collapses civilization, a troupe of actors and musicians travels the Great Lakes performing Shakespeare. Their story weaves back to a famous actor's death on the night the world ended.",
       "gr": "20170404",
       "coverUrl": "/covers/9780804172448.jpg"
+    },
+    {
+      "id": "7",
+      "type": "decor",
+      "decor": "snowglobe"
     },
     {
       "id": "5",
@@ -57,11 +57,6 @@
       "coverUrl": "/covers/9781635575637.jpg"
     },
     {
-      "id": "7",
-      "type": "decor",
-      "decor": "snowglobe"
-    },
-    {
       "id": "8",
       "isbn": "9780593318171",
       "title": "Klara and the Sun",
@@ -82,11 +77,6 @@
       "coverUrl": "/covers/9780307387899.jpg"
     },
     {
-      "id": "10",
-      "type": "decor",
-      "decor": "camera"
-    },
-    {
       "id": "11",
       "isbn": "9780547773742",
       "title": "A Wizard of Earthsea",
@@ -95,6 +85,11 @@
       "synopsis": "Ged, a gifted and proud young wizard, unleashes a shadow upon the world while showing off. He must hunt it across the islands of Earthsea, and learn that some battles can only be won by facing yourself.",
       "gr": "13642",
       "coverUrl": "/covers/9780547773742.jpg"
+    },
+    {
+      "id": "3",
+      "type": "decor",
+      "decor": "cactus"
     }
   ]
 }

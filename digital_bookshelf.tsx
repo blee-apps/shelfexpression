@@ -371,51 +371,19 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
 
 // --- DECORATIONS ---
 // A decoration stands in a slot like a book, at its true size next to a
-// paperback, bottom-aligned on the shelf. It lifts a little under the pointer
-// like a book, and a click just gives it a small wiggle.
-const DecorOnShelf = ({ item, def, height, slotStyle }: {
-  item: Book; def: DecorDef; height: number; slotStyle: React.CSSProperties;
-}) => {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [lifted, setLifted] = useState(false);
-  const h = hashString(item.id + def.id);
-  const tilt = (h % 2 === 0 ? 1 : -1) * (1.5 + (h % 3) * 0.5);
-  const ease = `${MOTION.hoverMs}ms ${MOTION.hover}`;
-  const width = height * def.aspect;
-  return (
-    <div className="decor-slot" aria-hidden="true" style={{ ...slotStyle, height }}>
-      {height > 0 && (
-        <div
-          ref={ref}
-          className="decor-item"
-          style={{ width, height }}
-          onPointerEnter={(e) => { if (e.pointerType !== 'touch') setLifted(true); }}
-          onPointerLeave={() => setLifted(false)}
-          onClick={() => {
-            ref.current?.animate?.(
-              [{ rotate: '0deg' }, { rotate: `${-tilt * 1.4}deg`, offset: 0.25 }, { rotate: `${tilt}deg`, offset: 0.55 }, { rotate: `${-tilt * 0.4}deg`, offset: 0.8 }, { rotate: '0deg' }],
-              { duration: 520, easing: 'ease-in-out' });
-          }}
-        >
-          <div className="decor-contact" style={{ left: `${def.base[0] * 100}%`, right: `${(1 - def.base[1]) * 100}%`, opacity: lifted ? 0.35 : 1, transition: `opacity ${ease}, transform ${ease}`, transform: lifted ? 'scaleX(1.15)' : 'none' }} />
-          <img
-            src={def.src}
-            alt=""
-            draggable={false}
-            className="decor-img"
-            style={{
-              transformOrigin: tilt > 0 ? 'right bottom' : 'left bottom',
-              translate: lifted ? `0 -${Math.round(height * 0.06)}px` : '0 0',
-              rotate: lifted ? `${tilt}deg` : '0deg',
-              scale: lifted ? '1.03' : '1',
-              transition: `translate ${ease}, rotate ${ease}, scale ${ease}`,
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
+// paperback, bottom-aligned on the shelf. It's just there: no hover, no click.
+const DecorOnShelf = ({ def, height, slotStyle }: {
+  def: DecorDef; height: number; slotStyle: React.CSSProperties;
+}) => (
+  <div className="decor-slot" aria-hidden="true" style={{ ...slotStyle, height }}>
+    {height > 0 && (
+      <div className="decor-item" style={{ width: height * def.aspect, height }}>
+        <div className="decor-contact" style={{ left: `${def.base[0] * 100}%`, right: `${(1 - def.base[1]) * 100}%` }} />
+        <img src={def.src} alt="" draggable={false} className="decor-img" />
+      </div>
+    )}
+  </div>
+);
 
 // The width of one slot in the books grid, and how many slots fit across.
 const useSlotSize = (gridRef: React.RefObject<HTMLDivElement | null>) => {
@@ -965,7 +933,7 @@ export default function App() {
     ? `transform ${MOTION.navMs}ms ${MOTION.move}, opacity 0.08s ease-out`
     : `transform ${animState === 'closing' ? MOTION.closeMs : MOTION.openMs}ms ${MOTION.move}, opacity 0.08s ease-out`;
 
-  // Where each decoration goes. One wider than a slot (the plant) takes two,
+  // Where each decoration goes. One wider than a slot takes two,
   // kept within one bay of the shelf so it never straddles the middle track.
   // Decorations only stand on the Vitsoe shelf.
   const decorEls: Record<string, React.ReactNode> = {};
@@ -983,7 +951,7 @@ export default function App() {
         if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
         else style.gridColumn = 'span 2';
       }
-      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} item={item} def={def} height={height} slotStyle={style} />;
+      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotStyle={style} />;
       col = (col + span) % cols;
     }
   }
@@ -1030,13 +998,13 @@ export default function App() {
 
         /* Decorations: bottom-aligned in their slot, standing on the shelf */
         .decor-slot { display: flex; justify-content: center; align-items: flex-end; min-width: 0; }
-        .decor-item { position: relative; flex-shrink: 0; cursor: default; }
+        .decor-item { position: relative; flex-shrink: 0; }
         .decor-img {
           position: absolute; inset: 0; width: 100%; height: 100%; display: block;
           -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
           /* A soft shadow on the wall behind, like the books' */
           filter: drop-shadow(3px -2px 8px rgba(0,0,0,0.10));
-          will-change: translate, rotate, scale;
+          pointer-events: none;
         }
         /* A tight, soft shadow where it touches the shelf */
         .decor-contact {
