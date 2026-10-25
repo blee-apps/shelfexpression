@@ -448,6 +448,10 @@ const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
   </div>
 );
 
+// Billy's compartments are deep and roomy, so books stand a size smaller in
+// them, centered in their slot, with air on every side.
+const BILLY_SCALE = 0.78;
+
 // A book's place on the Vitsoe shelf. Every slot is as tall as a paperback at
 // the slot's width, so all rows are the same height whatever the covers are.
 // The book fits inside it by its own shape (like object-fit: contain) and stands
@@ -459,7 +463,7 @@ const ShelfSlot = ({ book, children }: { book: Book; children: (coverWidth: stri
   const aspect = useBookAspectRatio(book);
   const fit = Math.min(1, aspect / BOOK_ASPECT);
   return (
-    <div className="vitsoe-slot" style={{ aspectRatio: BOOK_ASPECT }}>
+    <div className="vitsoe-slot" style={SHELF_STYLE === 'billy' ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center' } : { aspectRatio: BOOK_ASPECT }}>
       {children(`${(fit * 100).toFixed(3)}%`)}
     </div>
   );
@@ -1023,7 +1027,8 @@ export default function App() {
     for (const item of SHELF_ITEMS) {
       const def = isDecor(item) ? decorDefOf(item) : undefined;
       if (isDecor(item) && !def) continue;
-      const height = def ? (slot.w / BOOK_ASPECT) * def.height : 0;
+      const bookW = slot.w * (SHELF_STYLE === 'billy' ? BILLY_SCALE : 1);
+      const height = def ? (bookW / BOOK_ASPECT) * def.height : 0;
       const span = def && slot.w > 0 && height * def.aspect > slot.w && cols >= 2 ? 2 : 1;
       const style: React.CSSProperties = {};
       if (span === 2) {
@@ -1031,7 +1036,7 @@ export default function App() {
         if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
         else style.gridColumn = 'span 2';
       }
-      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={slot.w / BOOK_ASPECT} slotStyle={style} />;
+      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={bookW / BOOK_ASPECT} slotStyle={style} />;
       col = (col + span) % cols;
     }
   }
@@ -1352,7 +1357,7 @@ export default function App() {
           {SHELF_STYLE === 'billy' && <BillyStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-10 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {SHELF_ITEMS.map((book) => {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
