@@ -79,6 +79,17 @@ Turn on **Include the editor** to edit on that site later. It opens the same way
 
 **Guest mode.** Anyone who finds the editor on your site can tap **Continue as guest** to try it, make share images or create a static site. Nothing is ever published. To turn that off, untick **Let visitors try the editor** in **Site details**. Then the editor only opens with your GitHub key.
 
+### 8. Keep it up to date
+
+When a new version of Shelf Expression comes out, the editor on your live site shows a card saying so. Tap **See what's new** to read what changed, then:
+
+- **Preview first** puts the new version on a branch called `shelf-update`. Vercel and Netlify build a preview of it, and the editor links to it when it's ready. Happy? Tap **Make it live**.
+- **Update** makes it live straight away.
+
+Your books, covers, site details, README and `.env` are never touched. Only the app's own files change. If you've edited any of those yourself, the editor lists them before replacing them, and your old versions stay in GitHub's history. The editor's footer shows which version you have.
+
+This works for copies made from version 3.9.0 or later. For an older copy, make a fresh one from this template and copy your `content` folder across, once.
+
 ## Optional API keys
 
 Everything works without keys. Add these to a `.env` file in the project folder to unlock extras:

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus } from 'lucide-react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
@@ -7,6 +7,8 @@ import { prepareDecorImage } from './decorUpload';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
+import UpdatePanel from './UpdatePanel';
+import { Release, CURRENT_VERSION, UPSTREAM, checkForUpdates } from './updater';
 import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
 import { getToken } from './github';
 import { pendingCovers, coverSrc, addPendingCover, fetchCover, resizeCover, describeChanges, publish, PublishError, PublishResult,
@@ -141,6 +143,22 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
   const [studioOpen, setStudioOpen] = useState(false);
   const [staticOpen, setStaticOpen] = useState(false);
+  // New versions of Shelf Expression, checked at most once an hour.
+  const [updates, setUpdates] = useState<Release[] | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const isUpstream = SITE.github.repo.toLowerCase() === UPSTREAM;
+  useEffect(() => {
+    if (isUpstream) return;
+    const KEY = 'bookshelf.updateCheck';
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+      if (cached && cached.v === CURRENT_VERSION && Date.now() - cached.at < 3600_000) { setUpdates(cached.list); return; }
+    } catch {}
+    checkForUpdates(getToken() || undefined).then(list => {
+      setUpdates(list);
+      try { sessionStorage.setItem(KEY, JSON.stringify({ v: CURRENT_VERSION, at: Date.now(), list })); } catch {}
+    }).catch(() => {});
+  }, []);
   const [siteOpen, setSiteOpen] = useState(false);
   // Decoration picker: adding a new one (NEW_BOOK) or changing the one in a slot.
   const [decorPickFor, setDecorPickFor] = useState(-1);
@@ -1145,6 +1163,18 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         {/* SITE DETAILS, HOST IT YOURSELF, SHARE: side by side when there's room, stacked on a phone */}
         {!shareMode && (
           <div className="admin-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 12, marginBottom: 16 }}>
+            {!isUpstream && updates && updates.length > 0 && (
+              <div className="admin-update-card" style={{ ...cardStyle, background: '#f2f7f3' }}>
+                <ArrowUpCircle size={18} style={{ color: '#1a7f37', flexShrink: 0 }} />
+                <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>Version {updates[0].version}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#888', lineHeight: 1.4 }}>
+                    New: {updates[0].name}. You have {CURRENT_VERSION}.
+                  </div>
+                </div>
+                <button onClick={() => setUpdateOpen(true)} style={{ ...btnStyle({ small: true }), whiteSpace: 'nowrap', flexShrink: 0 }}>See what{'\u2019'}s new</button>
+              </div>
+            )}
             <div className="admin-site-card" style={{ ...cardStyle, background: '#fafafa' }}>
               <PenLine size={18} style={{ color: '#555', flexShrink: 0 }} />
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -1349,6 +1379,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         </div>
         {hasDecor && !useVitsoeShelf && <div style={{ margin: '-10px auto 22px', maxWidth: 520 }}><MinimalDecorWarning /></div>}
 
+        {!shareMode && (
+          <div className="admin-version" style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 10px' }}>
+            Shelf Expression {CURRENT_VERSION}{updates && !updates.length ? ', up to date' : ''}
+          </div>
+        )}
         {!import.meta.env.DEV && (
           <button onClick={() => setShowAdvanced(v => !v)} style={{ ...btnStyle({ secondary: true, small: true }), marginBottom: 12 }}>
             {showAdvanced ? 'Hide advanced' : 'Advanced: load or copy books.json'}
@@ -1427,6 +1462,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           target={import.meta.env.DEV ? 'local' : guest || IS_STATIC_SITE ? 'device' : 'github'} />
       )}
 
+      {updateOpen && updates && (
+        <UpdatePanel releases={updates} guest={guest} hasUnpublished={hasChanges} onClose={() => setUpdateOpen(false)} />
+      )}
       {staticOpen && (
         <StaticSitePanel bookCount={bookCount} onClose={() => setStaticOpen(false)}
           getContent={() => JSON.parse(buildJson())} />
