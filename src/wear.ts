@@ -13,9 +13,13 @@ export const WEAR_OPTIONS: { value: Wear; label: string }[] = [
 ];
 export const isWear = (v: unknown): v is Wear => v === 'off' || v === 'light' || v === 'heavy';
 
-const LEVEL: Record<Exclude<Wear, 'off'>, { strength: number; fade: number }> = {
-  light: { strength: 0.5, fade: 0.1 },
-  heavy: { strength: 1, fade: 0.25 },
+// strength: how strongly the wear shows. fade: how much the cover's color
+// fades. stain: whether ring stains can appear. cut: how big a bite the worn
+// corners take out of the cover (1 = the full worn corner).
+type Level = { strength: number; fade: number; stain: boolean; cut: number };
+const LEVEL: Record<Exclude<Wear, 'off'>, Level> = {
+  light: { strength: 0.3, fade: 0.05, stain: false, cut: 0.5 },
+  heavy: { strength: 1, fade: 0.25, stain: true, cut: 1 },
 };
 
 export const wearLevel = (w: Wear) => (w === 'off' ? null : LEVEL[w]);
@@ -90,7 +94,7 @@ const shapeOf = (aspect: number) => {
 };
 const toUrl = (c: HTMLCanvasElement) => new Promise<string | null>(r => c.toBlob(b => r(b ? URL.createObjectURL(b) : null), 'image/png'));
 
-function drawPart(x: CanvasRenderingContext2D, img: HTMLImageElement, name: string, flip: boolean, h: number) {
+function drawPart(x: CanvasRenderingContext2D, img: HTMLImageElement, name: string, flip: boolean, h: number, cut = 1) {
   const b = BOX[name];
   if (!b) return;
   const [bx, by, bw, bh] = b;
@@ -98,7 +102,9 @@ function drawPart(x: CanvasRenderingContext2D, img: HTMLImageElement, name: stri
   x.save();
   if (flip) { x.translate(0, h); x.scale(1, -1); }
   const kind = name.split('-')[0];
-  if (kind === 'corner' || kind === 'cut') {
+  if (kind === 'cut') {
+    x.drawImage(img, bx + bw * (1 - cut), by, bw * cut, bh * cut); // a smaller bite, still in the corner
+  } else if (kind === 'corner') {
     x.drawImage(img, bx, by, bw, bh); // pinned to the corner, never resized
   } else if (kind === 'stain') {
     const cy = (by + bh / 2) * k;
@@ -115,13 +121,14 @@ function drawPart(x: CanvasRenderingContext2D, img: HTMLImageElement, name: stri
   x.restore();
 }
 
-export function wearArt(title: string, author: string, aspect: number): Promise<WearArt | null> {
+export function wearArt(title: string, author: string, aspect: number, wear: Wear = 'heavy'): Promise<WearArt | null> {
+  const lv = wearLevel(wear) ?? LEVEL.heavy;
   const { w, h } = shapeOf(aspect);
-  const key = `${title.toLowerCase()}|${author.toLowerCase()}|${h}`;
+  const key = `${title.toLowerCase()}|${author.toLowerCase()}|${h}|${wear}`;
   let p = arts.get(key);
   if (!p) {
     p = (async () => {
-      const parts = wearParts(title, author);
+      const parts = wearParts(title, author).filter(pt => lv.stain || !pt.name.startsWith('stain'));
       const cuts = parts.filter(pt => pt.name.startsWith('corner-')).map(pt => ({ name: pt.name.replace('corner', 'cut'), flip: pt.flip }));
       const [imgs, cutImgs] = await Promise.all([
         Promise.all(parts.map(pt => loadImg(`/wear/${pt.name}.webp`))),
@@ -139,7 +146,7 @@ export function wearArt(title: string, author: string, aspect: number): Promise<
       mx.fillStyle = '#fff';
       mx.fillRect(0, 0, w, h);
       mx.globalCompositeOperation = 'destination-out';
-      cuts.forEach((pt, i) => { const img = cutImgs[i]; if (img) drawPart(mx, img, pt.name, pt.flip, h); });
+      cuts.forEach((pt, i) => { const img = cutImgs[i]; if (img) drawPart(mx, img, pt.name, pt.flip, h, lv.cut); });
       const [overlay, mask] = await Promise.all([toUrl(c), toUrl(m)]);
       return overlay && mask ? { overlay, mask } : null;
     })();
@@ -159,7 +166,7 @@ export function wornCover(img: HTMLImageElement, title: string, author: string, 
   let p = baked.get(key);
   if (!p) {
     p = (async () => {
-      const art = await wearArt(title, author, img.naturalWidth / img.naturalHeight);
+      const art = await wearArt(title, author, img.naturalWidth / img.naturalHeight, wear);
       const [overlay, mask] = art ? await Promise.all([loadImg(art.overlay), loadImg(art.mask)]) : [null, null];
       try {
         const scale = Math.min(1, 1200 / img.naturalHeight);
