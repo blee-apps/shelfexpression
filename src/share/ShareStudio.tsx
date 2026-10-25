@@ -191,10 +191,10 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     // A picked color is drawn like a cover color: the text turns light or
     // dark to suit it.
     const fb = carousel.bg;
-    const tint = fb === 'cover' ? coverColor(sb.img) : fb === 'custom' ? hexRgb(carousel.custom) : null;
+    const tint = fb === 'cover' ? coverColor(sb.img) : null;
     return {
       books: [sb],
-      opts: { ...main, layout: 'feature', heading: '', synopsis: carousel.synopsis, bg: fb === 'cover' || fb === 'custom' ? 'cover' : fb },
+      opts: { ...main, layout: 'feature', heading: '', synopsis: carousel.synopsis, bg: fb, custom: carousel.custom },
       tint,
     };
   }
@@ -393,41 +393,6 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </div>
           </Section>
 
-          {order.length > 1 && features.length > 0 && (
-            <Section label="Carousel" hint={carouselOn ? `${slideCount} images` : undefined}>
-              <Toggle label="Add a slide for each book" checked={carousel.on} onChange={v => { setCarousel({ on: v }); setSlide(0); }} />
-              {carouselOn && (
-                <>
-                  <div style={{ fontSize: 12, color: '#999', margin: '8px 0 10px', lineHeight: 1.4 }}>
-                    After this image, each book gets its own feature. Decorations stay in the first one.
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 8 }}>Feature background</div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    {([['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Each cover'], ['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark']] as [FeatureBg, string, string][]).map(([v, color, label]) => (
-                      <button key={v} onClick={() => setCarousel({ bg: v })} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: color, border: '1px solid #ddd', outline: carousel.bg === v ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
-                        <div style={{ fontSize: 11, color: carousel.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
-                      </button>
-                    ))}
-                    {/* Your own color: tapping the swatch opens the color picker. */}
-                    <label style={{ cursor: 'pointer', textAlign: 'center', position: 'relative' }} onClick={() => setCarousel({ bg: 'custom' })}>
-                      <div style={{ width: 40, height: 40, borderRadius: 20, background: carousel.custom, border: '1px solid #ddd', outline: carousel.bg === 'custom' ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
-                      <div style={{ fontSize: 11, color: carousel.bg === 'custom' ? '#1a1a1a' : '#888', marginTop: 5 }}>Custom</div>
-                      <input type="color" value={carousel.custom} aria-label="Custom background color"
-                        onChange={e => setCarousel({ bg: 'custom', custom: e.target.value })}
-                        style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
-                    </label>
-                  </div>
-                  <Toggle label="Show synopsis" checked={carousel.synopsis} onChange={v => setCarousel({ synopsis: v })} />
-                  <div style={{ marginTop: 10 }}>
-                    <Segmented value={opts.align} onChange={v => set('align', v as 'left' | 'center')}
-                      items={[{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centered' }]} />
-                  </div>
-                </>
-              )}
-            </Section>
-          )}
-
           {layout === 'feature' && (
             <Section label="Feature">
               <Segmented value={opts.align} onChange={v => set('align', v as 'left' | 'center')}
@@ -449,6 +414,14 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   <div style={{ fontSize: 11, color: opts.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
                 </button>
               ))}
+              {/* Your own color: tapping the swatch opens the color picker. */}
+              <label style={{ cursor: 'pointer', textAlign: 'center', position: 'relative' }} onClick={() => set('bg', 'custom')}>
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: opts.custom, border: '1px solid #ddd', outline: opts.bg === 'custom' ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
+                <div style={{ fontSize: 11, color: opts.bg === 'custom' ? '#1a1a1a' : '#888', marginTop: 5 }}>Custom</div>
+                <input type="color" value={opts.custom} aria-label="Custom background color"
+                  onChange={e => { set('custom', e.target.value); set('bg', 'custom'); }}
+                  style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
+              </label>
               {opts.bg === 'cover' && order.length > 1 && (
                 // Pages through the chosen books to pick which cover sets the color.
                 <div className="share-tint-picker" style={{ display: 'flex', alignItems: 'center', height: 44, marginLeft: 4 }}>
@@ -461,6 +434,41 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
               )}
             </div>
           </Section>
+
+          {order.length > 1 && features.length > 0 && (
+            <Section label="Carousel" hint={carouselOn ? `${slideCount} images` : undefined}>
+              <Toggle label="Add a slide for each book" checked={carousel.on} onChange={v => { setCarousel({ on: v }); setSlide(0); }} />
+              {carouselOn && (
+                <>
+                  <div style={{ fontSize: 12, color: '#999', margin: '8px 0 10px', lineHeight: 1.4 }}>
+                    After this image, each book gets its own feature. Decorations stay in the first one.
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 8 }}>Feature background</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {([['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Each cover'], ['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark']] as [FeatureBg, string, string][]).map(([v, color, label]) => (
+                      <button key={v} onClick={() => setCarousel({ bg: v })} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: color, border: '1px solid #ddd', outline: carousel.bg === v ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
+                        <div style={{ fontSize: 11, color: carousel.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
+                      </button>
+                    ))}
+                    {/* Your own color: tapping the swatch opens the color picker. */}
+                    <label style={{ cursor: 'pointer', textAlign: 'center', position: 'relative' }} onClick={() => setCarousel({ bg: 'custom' })}>
+                      <div style={{ width: 40, height: 40, borderRadius: 20, background: carousel.custom, border: '1px solid #ddd', outline: carousel.bg === 'custom' ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
+                      <div style={{ fontSize: 11, color: carousel.bg === 'custom' ? '#1a1a1a' : '#888', marginTop: 5 }}>Custom</div>
+                      <input type="color" value={carousel.custom} aria-label="Custom feature background color"
+                        onChange={e => setCarousel({ bg: 'custom', custom: e.target.value })}
+                        style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
+                    </label>
+                  </div>
+                  <Toggle label="Show synopsis" checked={carousel.synopsis} onChange={v => setCarousel({ synopsis: v })} />
+                  <div style={{ marginTop: 10 }}>
+                    <Segmented value={opts.align} onChange={v => set('align', v as 'left' | 'center')}
+                      items={[{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centered' }]} />
+                  </div>
+                </>
+              )}
+            </Section>
+          )}
 
           <Section label="Heading" hint="Optional">
             <input value={opts.heading} onChange={e => setOpts(o => ({ ...o, heading: e.target.value }))}
@@ -530,9 +538,6 @@ const input: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8,
   fontSize: 14, fontFamily: 'inherit', background: '#fff',
 };
-
-const hexRgb = (h: string): [number, number, number] =>
-  [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 
 const navBtn: React.CSSProperties = {
   width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none',
