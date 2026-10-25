@@ -55,7 +55,12 @@ export const RAW_ITEMS: RawBook[] = (content.books as any[]).map(toItem);
 // Just the books.
 export const RAW_BOOKS: RawBook[] = RAW_ITEMS.filter(b => !isDecor(b));
 
-export const USE_VITSOE_SHELF: boolean = content.useVitsoeShelf;
+// Billy (IKEA's classic bookcase) shares the Vitsoe layout: books stand on
+// shelves, only the furniture around them changes.
+export type ShelfStyle = 'minimal' | 'vitsoe' | 'billy';
+const shelfSetting = (content as { shelf?: string }).shelf;
+export const SHELF_STYLE: ShelfStyle = shelfSetting === 'billy' ? 'billy' : content.useVitsoeShelf ? 'vitsoe' : 'minimal';
+export const USE_VITSOE_SHELF: boolean = SHELF_STYLE !== 'minimal';
 
 // Worn covers: off, light, or heavy (Well-loved).
 const wearSetting = (content as { wear?: string }).wear;

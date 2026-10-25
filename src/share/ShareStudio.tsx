@@ -408,7 +408,8 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             <Segmented value={layout} onChange={v => set('layout', v as ShareLayout)}
               items={[
                 { value: 'grid', label: 'Grid', disabled: single },
-                { value: 'shelf', label: 'Shelf' },
+                { value: 'shelf', label: 'Vitsoe' },
+                { value: 'billy', label: 'Billy' },
                 { value: 'feature', label: 'Feature', disabled: !single },
               ]} />
             <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>

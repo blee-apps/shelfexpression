@@ -5,7 +5,8 @@ import { BOOK_ASPECT } from '../decor';
 import type { Wear } from '../wear';
 
 export type ShareSize = 'story' | 'post' | 'square';
-export type ShareLayout = 'grid' | 'shelf' | 'feature';
+// 'shelf' is the Vitsoe 606 (its saved name from before Billy).
+export type ShareLayout = 'grid' | 'shelf' | 'billy' | 'feature';
 export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom';
 
 export interface ShareOptions {
@@ -324,6 +325,7 @@ export function renderShare(canvas: HTMLCanvasElement, books: ShareBook[], o: Sh
   const box = { x: pad, y: top, w: W - pad * 2, h: bottom - top };
   if (layout === 'feature') drawFeature(ctx, books[0], o, p, box, W);
   else if (layout === 'shelf') drawShelf(ctx, books, p, box, W, H);
+  else if (layout === 'billy') drawBilly(ctx, books, p, box, W);
   else drawGrid(ctx, books, o, p, box);
   ctx.textAlign = 'left';
 }
@@ -434,26 +436,133 @@ function drawShelf(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
     ctx.fillRect(sx, face, sw, lip);
 
     for (const it of placeRow(books, row, L, inner.x, inner.w, y, gap)) {
-      const img = it.b.img;
       if (it.b.decor) { drawDecor(ctx, it.b, it.x, it.y, it.w, it.h, p, true); continue; }
-      // A tight contact shadow where it stands, and a soft one on the wall
-      // behind (up and to the side, so the book doesn't float over the lip).
-      const standing: CoverDraw = (c, bx, by, bw, bh) => {
-        c.fillStyle = `rgba(0,0,0,${dark ? 0.5 : 0.22})`;
-        c.fillRect(bx + 1, by + bh - 1, bw - 2, 3);
-        c.save();
-        c.shadowColor = `rgba(0,0,0,${dark ? 0.45 : 0.14})`;
-        c.shadowBlur = Math.max(12, bw * 0.07);
-        c.shadowOffsetX = 5;
-        c.shadowOffsetY = -4;
-        if (img) c.drawImage(img, bx, by, bw, bh);
-        else { c.fillStyle = 'rgba(128,128,128,0.25)'; c.fillRect(bx, by, bw, bh); }
-        c.restore();
-      };
-      if (!captured(img, it.x, it.y, it.w, it.h, standing)) standing(ctx, it.x, it.y, it.w, it.h);
+      drawStanding(ctx, it.b.img, it.x, it.y, it.w, it.h, dark);
     }
     y += L.slotH + reserve;
   }
+}
+
+// A book standing on a shelf: a tight contact shadow where it stands, and a
+// soft one on the back behind it (up and to the side, so it doesn't float).
+function drawStanding(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, x: number, y: number, w: number, h: number, dark: boolean) {
+  const standing: CoverDraw = (c, bx, by, bw, bh) => {
+    c.fillStyle = `rgba(0,0,0,${dark ? 0.5 : 0.22})`;
+    c.fillRect(bx + 1, by + bh - 1, bw - 2, 3);
+    c.save();
+    c.shadowColor = `rgba(0,0,0,${dark ? 0.45 : 0.14})`;
+    c.shadowBlur = Math.max(12, bw * 0.07);
+    c.shadowOffsetX = 5;
+    c.shadowOffsetY = -4;
+    if (img) c.drawImage(img, bx, by, bw, bh);
+    else { c.fillStyle = 'rgba(128,128,128,0.25)'; c.fillRect(bx, by, bw, bh); }
+    c.restore();
+  };
+  if (!captured(img, x, y, w, h, standing)) standing(ctx, x, y, w, h);
+}
+
+function drawBilly(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette, box: Box, W: number) {
+  // An IKEA Billy, matching the site: a closed white box (black-brown when
+  // dark) with thick sides, a back panel, inner walls seen as slivers with
+  // their pin holes, shelves showing their top surface, and a plinth.
+  const dark = p.dark;
+  const C = dark
+    ? { front: '#3a332e', edge: '#241f1b', topBack: '#2a2521', topFront: '#362f2a', lip: '#4a423b', back: '#1e1b18', wall: '#2b2622', hole: 'rgba(0,0,0,0.75)' }
+    : { front: '#f8f7f3', edge: '#d9d6cf', topBack: '#e9e6df', topFront: '#f5f3ee', lip: '#fdfcfa', back: '#e7e4dd', wall: '#d8d4cb', hole: 'rgba(60,55,45,0.45)' };
+  const SIDE = 24, BOARD = 20, SURFACE = 16, SLIVER = 11, PLINTH = 58, HEAD = 44;
+  const ox = box.x - 40, ow = W - ox * 2;          // the cabinet
+  const ix = ox + SIDE, iw = ow - SIDE * 2;         // inside it
+  const margin = 56;                                // books keep clear of the walls
+  const inner = { x: ix + SLIVER + margin, w: iw - (SLIVER + margin) * 2 };
+  const gap = 40;
+  const perRow = HEAD + SURFACE * 0.45 + BOARD;
+  const avail = box.h - BOARD - PLINTH;
+  const L = slotLayout(books, inner.w, avail, gap, 0, perRow, avail * 0.55);
+  const rowH = L.slotH + perRow;
+  const total = BOARD + rowH * L.rows.length + PLINTH;
+  const y0 = box.y + (box.h - total) / 2;
+
+  // The cabinet, with a soft shadow on the wall and floor.
+  ctx.save();
+  ctx.shadowColor = `rgba(0,0,0,${dark ? 0.6 : 0.22})`;
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 18;
+  ctx.fillStyle = C.front;
+  ctx.fillRect(ox, y0, ow, total);
+  ctx.restore();
+  ctx.strokeStyle = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(ox + 0.5, y0 + 0.5, ow - 1, total - 1);
+
+  // Each bay: back panel shaded under the shelf above, then the side slivers.
+  const shelfTops: number[] = [];
+  L.rows.forEach((_, i) => {
+    const top = y0 + BOARD + rowH * i;
+    const shelf = top + HEAD + L.slotH - SURFACE * 0.55;
+    shelfTops.push(shelf);
+    const bh = shelf - top;
+    ctx.fillStyle = C.back;
+    ctx.fillRect(ix, top, iw, bh);
+    const g = ctx.createLinearGradient(0, top, 0, top + bh);
+    g.addColorStop(0, 'rgba(0,0,0,0.20)');
+    g.addColorStop(Math.min(0.3, 18 / bh), 'rgba(0,0,0,0.07)');
+    g.addColorStop(Math.min(0.45, 60 / bh), 'rgba(0,0,0,0.02)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0)');
+    g.addColorStop(1 - Math.min(0.3, 30 / bh), 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.05)');
+    ctx.fillStyle = g;
+    ctx.fillRect(ix, top, iw, bh);
+    for (const [sx, dir] of [[ix, 1], [ix + iw - SLIVER, -1]] as const) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.07)';
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetX = 2 * dir;
+      ctx.fillStyle = C.wall;
+      ctx.fillRect(sx, top, SLIVER, bh);
+      ctx.restore();
+      ctx.fillStyle = C.hole;
+      for (let hy = top + 10; hy < top + bh - 4; hy += 30) {
+        ctx.beginPath(); ctx.arc(sx + SLIVER / 2, hy, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  });
+
+  // Shelves: the top surface (darker toward the back), a bright edge, the front.
+  shelfTops.forEach((t, i) => {
+    const base = i === shelfTops.length - 1;
+    const x = base ? ox : ix, w = base ? ow : iw;
+    const tg = ctx.createLinearGradient(0, t, 0, t + SURFACE);
+    tg.addColorStop(0, C.topBack);
+    tg.addColorStop(1, C.topFront);
+    ctx.fillStyle = tg;
+    ctx.fillRect(x, t, w, SURFACE);
+    ctx.fillStyle = dark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.10)';
+    ctx.fillRect(x, t, w, 1);
+    ctx.fillStyle = C.lip;
+    ctx.fillRect(x, t + SURFACE, w, 2);
+    ctx.fillStyle = C.front;
+    ctx.fillRect(x, t + SURFACE + 2, w, BOARD - 4);
+    ctx.fillStyle = C.edge;
+    ctx.fillRect(x, t + SURFACE + BOARD - 2, w, 2);
+  });
+
+  // Plinth: the sides run to the floor, the toe kick between them is set back.
+  const py = shelfTops[shelfTops.length - 1] + SURFACE + BOARD;
+  const pg = ctx.createLinearGradient(0, py, 0, py + PLINTH);
+  pg.addColorStop(0, dark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.16)');
+  pg.addColorStop(Math.min(0.3, 8 / PLINTH), dark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.04)');
+  pg.addColorStop(0.4, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pg;
+  ctx.fillRect(ox + SIDE / 2, py, ow - SIDE, PLINTH);
+
+  // Books and decorations, standing on the front half of each surface.
+  L.rows.forEach((row, i) => {
+    const y = y0 + BOARD + rowH * i + HEAD;
+    for (const it of placeRow(books, row, L, inner.x, inner.w, y, gap)) {
+      if (it.b.decor) { drawDecor(ctx, it.b, it.x, it.y, it.w, it.h, p, true); continue; }
+      drawStanding(ctx, it.b.img, it.x, it.y, it.w, it.h, dark);
+    }
+  });
 }
 
 function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOptions, p: Palette, box: Box, W: number) {

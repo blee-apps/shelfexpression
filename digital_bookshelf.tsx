@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, WEAR, isDecor } from './src/books';
+import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, SHELF_STYLE, COLOR_MODE, WEAR, isDecor } from './src/books';
 import { wearArt, wearLevel, type WearArt } from './src/wear';
 import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
@@ -300,6 +300,43 @@ const useDarkMode = () => {
   return dark;
 };
 
+
+// --- BILLY (IKEA's 1979 bookcase, purely decorative) ---
+// A white box: thick side panels, a top, a base on a recessed plinth, and a
+// back panel inside. Wide screens get two units side by side. Each
+// compartment shows a sliver of its inner side walls with the column of
+// shelf-pin holes that makes a Billy a Billy.
+const BillyStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLDivElement | null>; animState: string }) => {
+  const { rows, gridOffsetTop } = useShelfRows(gridRef, animState);
+  if (rows.length === 0) return null;
+  const PAD = 24;
+  const rowH = rows[0].bottom - rows[0].top;
+  const board = Math.round(Math.min(22, Math.max(10, rowH * 0.075)));
+  const plinth = Math.round(Math.min(64, Math.max(30, rowH * 0.26)));
+  // Seen from a little above, like the Vitsoe shelf: a strip of each shelf's
+  // top surface shows above its front edge, and the books stand on its front
+  // half, so the back half shows behind them.
+  const surface = Math.round(board * 1.2);
+  const shelfTops = rows.map(r => r.bottom + PAD - Math.round(surface * 0.55));
+  const last = shelfTops[shelfTops.length - 1];
+  const height = last + surface + board + plinth;
+  const holeStep = Math.max(14, Math.round(rowH * 0.15));
+  const style = { top: gridOffsetTop - PAD, left: -PAD, right: -PAD, height, '--board': `${board}px`, '--surface': `${surface}px`, '--hole-step': `${holeStep}px` } as React.CSSProperties;
+  return (
+    <div className="billy" style={style} aria-hidden="true">
+      {rows.map((_, i) => {
+        const top = i === 0 ? board : shelfTops[i - 1] + surface + board;
+        return <div key={`c-${i}`} className="billy-row" style={{ top, height: shelfTops[i] - top }}>
+          <div className="billy-bay billy-bay-a" /><div className="billy-bay billy-bay-b" />
+        </div>;
+      })}
+      {shelfTops.map((t, i) => <div key={`s-${i}`} className={`billy-shelf${i === shelfTops.length - 1 ? ' billy-base' : ''}`} style={{ top: t }} />)}
+      <div className="billy-mid" style={{ height: last + surface }} />
+      <div className="billy-plinth" style={{ top: last + surface + board, height: plinth }} />
+    </div>
+  );
+};
+
 // --- SHELF STRUCTURE (Vitsoe 606-style, purely decorative) ---
 
 // Measures the books grid rows and the grid's own offsetTop from its parent
@@ -416,6 +453,10 @@ const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
   </div>
 );
 
+// Billy's compartments are deep and roomy, so books stand a size smaller in
+// them, centered in their slot, with air on every side.
+const BILLY_SCALE = 0.78;
+
 // A book's place on the Vitsoe shelf. Every slot is as tall as a paperback at
 // the slot's width, so all rows are the same height whatever the covers are.
 // The book fits inside it by its own shape (like object-fit: contain) and stands
@@ -423,11 +464,15 @@ const DecorOnShelf = ({ def, height, slotHeight, slotStyle }: {
 // narrow one fills the height and is narrower. The button is the cover's own
 // size, so the hover area and the rect the open animation starts from are the
 // cover, not the empty space above it.
-const ShelfSlot = ({ book, children }: { book: Book; children: (coverWidth: string) => React.ReactNode }) => {
+// In Billy each unit holds a pair, nudged a little toward each other: the
+// pin-hole walls make an evenly centered pair read as too far apart.
+const BILLY_NUDGE = 4; // % of the slot's grid cell
+
+const ShelfSlot = ({ book, col, children }: { book: Book; col?: number; children: (coverWidth: string) => React.ReactNode }) => {
   const aspect = useBookAspectRatio(book);
   const fit = Math.min(1, aspect / BOOK_ASPECT);
   return (
-    <div className="vitsoe-slot" style={{ aspectRatio: BOOK_ASPECT }}>
+    <div className="vitsoe-slot" style={SHELF_STYLE === 'billy' ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center', position: 'relative', left: col === undefined ? 0 : `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%` } : { aspectRatio: BOOK_ASPECT }}>
       {children(`${(fit * 100).toFixed(3)}%`)}
     </div>
   );
@@ -985,13 +1030,15 @@ export default function App() {
   // kept within one bay of the shelf so it never straddles the middle track.
   // Decorations only stand on the Vitsoe shelf.
   const decorEls: Record<string, React.ReactNode> = {};
+  const colOf: Record<string, number> = {};
   if (USE_VITSOE_SHELF) {
     const cols = slot.cols || 1;
     let col = 0;
     for (const item of SHELF_ITEMS) {
       const def = isDecor(item) ? decorDefOf(item) : undefined;
       if (isDecor(item) && !def) continue;
-      const height = def ? (slot.w / BOOK_ASPECT) * def.height : 0;
+      const bookW = slot.w * (SHELF_STYLE === 'billy' ? BILLY_SCALE : 1);
+      const height = def ? (bookW / BOOK_ASPECT) * def.height : 0;
       const span = def && slot.w > 0 && height * def.aspect > slot.w && cols >= 2 ? 2 : 1;
       const style: React.CSSProperties = {};
       if (span === 2) {
@@ -999,7 +1046,9 @@ export default function App() {
         if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
         else style.gridColumn = 'span 2';
       }
-      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={slot.w / BOOK_ASPECT} slotStyle={style} />;
+      colOf[item.id] = col;
+      if (def && span === 1 && SHELF_STYLE === 'billy') { style.position = 'relative'; style.left = `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%`; }
+      if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={bookW / BOOK_ASPECT} slotStyle={style} />;
       col = (col + span) % cols;
     }
   }
@@ -1021,6 +1070,61 @@ export default function App() {
             --ch: 240px;
           }
         }
+
+
+        /* ── Billy ─────────────────────────────────────────────────────── */
+        .billy {
+          position: absolute; pointer-events: none; z-index: 0;
+          --front: #f8f7f3; --edge: #d9d6cf; --top-back: #e9e6df; --top-front: #f5f3ee; --back: #e7e4dd; --wall-in: #d8d4cb; --hole: rgba(60,55,45,0.45);
+          background: var(--front);
+          box-shadow: 0 0 0 1px rgba(0,0,0,0.07), 0 30px 40px -28px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.05);
+          border-radius: 1px;
+        }
+        .billy-row { position: absolute; left: var(--side); right: var(--side); display: flex; gap: calc(var(--side) * 2); --side: 12px; }
+        @media (max-width: 767px) { .billy { left: 8px !important; right: 8px !important; } .billy-row { --side: 9px; } .billy-bay-b { display: none; } }
+        .billy-bay {
+          flex: 1; position: relative;
+          background:
+            /* the shelf above casts a shadow down the back panel */
+            linear-gradient(to bottom, rgba(0,0,0,0.20), rgba(0,0,0,0.07) 18px, rgba(0,0,0,0.02) 60px, rgba(0,0,0,0) 50%),
+            linear-gradient(to top, rgba(0,0,0,0.05), rgba(0,0,0,0) 30px),
+            var(--back);
+          box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+        }
+        /* The inner side walls, foreshortened to a sliver, with their pin holes */
+        .billy-bay::before, .billy-bay::after {
+          content: ''; position: absolute; top: 0; bottom: 0; width: 7px;
+          background:
+            radial-gradient(circle at 50% 50%, var(--hole) 0 1.3px, transparent 1.9px) 0 6px / 7px var(--hole-step) repeat-y,
+            var(--wall-in);
+        }
+        .billy-bay::before { left: 0; box-shadow: 2px 0 4px rgba(0,0,0,0.06); background-color: var(--wall-in); }
+        .billy-bay::after { right: 0; box-shadow: -2px 0 4px rgba(0,0,0,0.04); }
+        .billy-shelf {
+          position: absolute; left: 0; right: 0; height: calc(var(--surface) + var(--board)); z-index: 1;
+          /* top surface (shaded toward the back panel), then the front edge */
+          background: linear-gradient(to bottom, rgba(0,0,0,0.10) 0, var(--top-back) 1px, var(--top-front) var(--surface), #fdfcfa var(--surface), var(--front) calc(var(--surface) + 2px), var(--front) calc(100% - 2px), var(--edge) 100%);
+          box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 8px 12px -6px rgba(0,0,0,0.22);
+        }
+        .billy-shelf:not(.billy-base) { left: 12px; right: 12px; }
+        .billy-mid { display: none; }
+        @media (max-width: 767px) { .billy-shelf:not(.billy-base) { left: 9px; right: 9px; } }
+        /* Wide screens: two units, so the shelves stop at their own sides */
+        @media (min-width: 768px) {
+          .billy-mid { display: block; position: absolute; top: 0; left: calc(50% - 12px); width: 24px; z-index: 2; background: var(--front); }
+          .billy::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0,0,0,0.10); z-index: 2; }
+        }
+        .billy-plinth {
+          position: absolute; left: 10px; right: 10px;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.16), rgba(0,0,0,0.04) 8px, rgba(0,0,0,0) 40%), var(--front);
+        }
+        .billy-plinth::before, .billy-plinth::after { content: ''; position: absolute; top: 0; bottom: 0; width: 10px; background: var(--front); }
+        .billy-plinth::before { left: -10px; } .billy-plinth::after { right: -10px; }
+        @media (min-width: 768px) { .billy-plinth { background-image: linear-gradient(to right, transparent calc(50% - 10px), var(--front) calc(50% - 10px), var(--front) calc(50% + 10px), transparent calc(50% + 10px)), linear-gradient(to bottom, rgba(0,0,0,0.16), rgba(0,0,0,0.04) 8px, rgba(0,0,0,0) 40%); } }
+        /* Dark mode: Billy in black-brown */
+        .dark .billy { --front: #3a332e; --edge: #241f1b; --top-back: #2a2521; --top-front: #362f2a; --back: #1e1b18; --wall-in: #2b2622; --hole: rgba(0,0,0,0.75);
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 40px -28px rgba(0,0,0,0.8); }
+        .dark .billy-shelf { background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0, var(--top-back) 1px, var(--top-front) var(--surface), #4a423b var(--surface), var(--front) calc(var(--surface) + 2px), var(--front) calc(100% - 2px), var(--edge) 100%); }
 
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
@@ -1263,15 +1367,16 @@ export default function App() {
         {/* ── Vitsoe-style physical bookshelf ───────────────────────────── */}
         <div className="flex-1 flex flex-col w-full relative pt-4 md:pt-6 pb-10 md:pb-12">
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
-          {USE_VITSOE_SHELF && <ShelfStructure gridRef={gridRef} animState={animState} />}
+          {SHELF_STYLE === 'vitsoe' && <ShelfStructure gridRef={gridRef} animState={animState} />}
+          {SHELF_STYLE === 'billy' && <BillyStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {SHELF_ITEMS.map((book) => {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
-                <ShelfSlot key={book.id} book={book}>{coverWidth => (
+                <ShelfSlot key={book.id} book={book} col={colOf[book.id]}>{coverWidth => (
                 <button
                   type="button"
                   ref={el => { bookButtonRefs.current[book.id] = el; }}
