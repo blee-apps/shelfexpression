@@ -1381,7 +1381,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 
         {!shareMode && (
           <div className="admin-version" style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 10px' }}>
-            Shelf Expression {CURRENT_VERSION}{updates && !updates.length ? ', up to date' : ''}
+            <a href={`https://github.com/${UPSTREAM}/releases/tag/v${CURRENT_VERSION}`} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Shelf Expression {CURRENT_VERSION}</a>{updates && !updates.length ? ', up to date' : ''}
           </div>
         )}
         {!import.meta.env.DEV && (
