@@ -4,7 +4,7 @@ import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf'
 import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
 import { prepareDecorImage } from './decorUpload';
-import ShareStudio from './share/ShareStudio';
+import ShareStudio, { clearShareExtras } from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
 import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
@@ -635,6 +635,22 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     } catch { return ''; }
   };
 
+  // Shortens any synopsis (for books added just for sharing).
+  const shortenText = async (text: string): Promise<string> => {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orKey}` },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [{ role: 'user', content: `Summarize this book synopsis in 2-3 short, punchy sentences. Keep it tight — avoid long clauses, elaborate phrasing, and unnecessary detail. Preserve the key details and tone:\n\n${text}` }],
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const out = (await r.json())?.choices?.[0]?.message?.content;
+    if (!out) throw new Error('empty');
+    return String(out).trim();
+  };
+
   const summarizeSynopsis = async () => {
     if (!editSynopsis || !orKey || !selectedModel) return;
     setSummarizing(true);
@@ -1098,11 +1114,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '10px 16px', paddingTop: 'max(10px, env(safe-area-inset-top))', borderBottom: '1px solid #eee', flexShrink: 0,
         }}>
-          <button onClick={() => { setShareMode(false); setSelectedForShare(new Set()); }} style={btnStyle({ secondary: true, small: true })} aria-label="Close Share Studio"><X size={14} /></button>
+          <button onClick={() => { setShareMode(false); setSelectedForShare(new Set()); clearShareExtras(); }} style={btnStyle({ secondary: true, small: true })} aria-label="Close Share Studio"><X size={14} /></button>
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.2 }}>
             <h1 style={{ fontSize: '1.05rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Share Studio</h1>
             <span style={{ fontSize: '0.75rem', color: '#888', whiteSpace: 'nowrap' }}>
-              {selectedForShare.size ? `${selectedForShare.size} of 12 picked` : 'Pick up to 12 books'}
+              {selectedForShare.size ? `${selectedForShare.size} of 12 picked` : 'Pick books, or add others next'}
             </span>
           </div>
           {(() => {
@@ -1118,8 +1134,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             );
           })()}
           <div style={{ flex: 1 }} />
-          <button onClick={() => setStudioOpen(true)} disabled={selectedForShare.size === 0}
-            style={{ ...btnStyle({ small: true }), ...(selectedForShare.size === 0 ? { opacity: 0.45, cursor: 'default' } : {}) }}>
+          <button onClick={() => setStudioOpen(true)} style={btnStyle({ small: true })}
+            title={selectedForShare.size === 0 ? 'Go on with no books picked, and add some just for sharing' : undefined}>
             Next
           </button>
         </div>
@@ -1396,6 +1412,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           footer={footerText}
           onFooterChange={changeFooter}
           toast={showToast}
+          gbKey={gbKey}
+          summarize={orKey && selectedModel ? shortenText : undefined}
           onClose={order => {
             // Keep the order and picks from the studio.
             setSelectedForShare(new Set(order.map(b => slots.findIndex(s => s?.id === b.id)).filter(i => i >= 0)));

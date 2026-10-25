@@ -1,10 +1,40 @@
 // Full-screen share studio: a live preview of the share image, with options
 // for size, layout, background and text, and a button to share or save it.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { X, Share2, Download, GripVertical, ChevronLeft } from 'lucide-react';
+import { X, Share2, Download, GripVertical, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { zipSync } from 'fflate';
 import { isDecor, type Book } from '../books';
 import { decorDefOf } from '../decor';
 import { renderShare, morphShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
+import AddForShare, { isTemp } from './AddForShare';
+
+const MAX_ITEMS = 12;
+
+// Books and decorations added just for sharing. They last while the page is
+// open (so going back to pick more books keeps them), and are never saved.
+let sessionExtras: Book[] = [];
+// Leaving Share Studio altogether lets them go.
+export const clearShareExtras = () => { sessionExtras = []; };
+
+// Carousel: after the main image, one feature slide for each book.
+type Carousel = { on: boolean; bg: 'cover' | 'match'; synopsis: boolean };
+const CAROUSEL_KEY = 'bookshelf.shareCarousel';
+const loadCarousel = (): Carousel => {
+  const d: Carousel = { on: false, bg: 'cover', synopsis: true };
+  try { return { ...d, ...JSON.parse(localStorage.getItem(CAROUSEL_KEY) || '{}') }; } catch { return d; }
+};
+
+const loadDirect = (url?: string): Promise<HTMLImageElement | null> => new Promise(resolve => {
+  if (!url) return resolve(null);
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => resolve(null);
+  img.src = url;
+});
+
+// A decoration's height next to a paperback (one of yours added just for
+// sharing carries it itself).
+const decorHeight = (b: Book) => isDecor(b) ? decorDefOf(b)?.height ?? b.height ?? 0.5 : undefined;
 
 const OPTIONS_KEY = 'bookshelf.shareOptions';
 
@@ -20,10 +50,21 @@ interface Props {
   onFooterChange: (text: string) => void;
   onClose: (order: Book[]) => void;
   toast: (msg: string) => void;
+  gbKey: string;
+  summarize?: (text: string) => Promise<string>;
 }
 
-export default function ShareStudio({ books, loadCover, footer, onFooterChange, onClose, toast }: Props) {
-  const [order, setOrder] = useState<Book[]>(books);
+export default function ShareStudio({ books, loadCover, footer, onFooterChange, onClose, toast, gbKey, summarize }: Props) {
+  const [order, setOrder] = useState<Book[]>(() => [...books, ...sessionExtras].slice(0, MAX_ITEMS));
+  const [adding, setAdding] = useState(false);
+  const [carousel, setCarouselState] = useState<Carousel>(loadCarousel);
+  const setCarousel = (patch: Partial<Carousel>) => setCarouselState(prev => {
+    const next = { ...prev, ...patch };
+    try { localStorage.setItem(CAROUSEL_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+  const [slide, setSlide] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const [opts, setOpts] = useState<ShareOptions>(loadOptions);
   const [imgs, setImgs] = useState<Map<string, HTMLImageElement | null>>(new Map());
   const [busy, setBusy] = useState(true);
@@ -49,21 +90,32 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     ]).finally(() => setFontsReady(true));
   }, []);
 
-  // Cover images.
+  // Cover images, loaded as items join the set.
+  const requested = useRef(new Set<string>());
   useEffect(() => {
-    let alive = true;
+    const missing = order.filter(b => !requested.current.has(b.id));
+    if (!missing.length) { setBusy(false); return; }
+    missing.forEach(b => requested.current.add(b.id));
     (async () => {
-      const entries = await Promise.all(books.map(async b => [b.id, await loadCover(b).catch(() => null)] as const));
-      if (alive) { setImgs(new Map(entries)); setBusy(false); }
+      const entries = await Promise.all(missing.map(async b => [b.id,
+        // Built-in decorations load like any other; your own temporary things
+        // come from the picture you just picked.
+        await (isTemp(b) && (isDecor(b) ? b.decor === 'custom' : true) ? loadDirect(isDecor(b) ? b.src : b.coverUrl) : loadCover(b)).catch(() => null)] as const));
+      setImgs(prev => { const next = new Map(prev); entries.forEach(([id, img]) => next.set(id, img)); return next; });
+      setBusy(false);
     })();
-    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [order]);
 
   const shareBooks: ShareBook[] = order.map(b => ({
     title: b.title, author: b.author, year: b.year, synopsis: b.synopsis, img: imgs.get(b.id) ?? null,
-    decor: isDecor(b) ? decorDefOf(b)?.height ?? 0.5 : undefined,
+    decor: decorHeight(b),
   }));
+  // Carousel slides: the main image, then a feature for each book in it.
+  const features = order.filter(b => !isDecor(b));
+  const carouselOn = carousel.on && order.length > 1 && features.length > 0;
+  const slideCount = carouselOn ? 1 + features.length : 1;
+  const current = Math.min(slide, slideCount - 1);
   const single = order.length === 1;
   const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' ? 'grid' : opts.layout;
 
@@ -85,6 +137,17 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     const canvas = canvasRef.current;
     const tint = opts.bg === 'cover' ? coverColor(tintImg) : null;
     const next = { ...opts, layout, footer };
+    if (current > 0) {
+      // A feature slide: drawn straight away (no glide).
+      stopMorph.current?.();
+      stopMorph.current = null;
+      lastDrawn.current = null;
+      const s = slideAt(current);
+      canvas.style.aspectRatio = `${SIZES[next.size].w} / ${SIZES[next.size].h}`;
+      renderShare(canvas, s.books, s.opts, s.tint);
+      blobRef.current = null;
+      return;
+    }
     const prev = lastDrawn.current;
     const same = (a: ShareBook[], b: ShareBook[]) => a.length === b.length && a.every((x, i) => x.img === b[i].img && x.title === b[i].title);
     // Nothing that shows has changed (a re-render): leave the canvas, and any
@@ -106,8 +169,47 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     blobRef.current = null;
     stopMorph.current = morphShare(canvas, prev!.books, prev!.opts, shareBooks, next, tint, 480, () => { stopMorph.current = null; saveBlob(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, fontsReady, order, opts, footer, imgs, tintImg]);
+  }, [busy, fontsReady, order, opts, footer, imgs, tintImg, current, carouselOn, carousel]);
   useEffect(() => () => stopMorph.current?.(), []);
+
+  // What slide i shows: 0 is the main image, then one feature per book.
+  function slideAt(i: number): { books: ShareBook[]; opts: ShareOptions; tint: [number, number, number] | null } {
+    const main = { ...opts, layout, footer };
+    const mainTint = opts.bg === 'cover' ? coverColor(tintImg) : null;
+    if (i === 0) return { books: shareBooks, opts: main, tint: mainTint };
+    const b = features[i - 1];
+    const sb = shareBooks[order.indexOf(b)];
+    const own = carousel.bg === 'cover';
+    return {
+      books: [sb],
+      opts: { ...main, layout: 'feature', heading: '', synopsis: carousel.synopsis, bg: own ? 'cover' : opts.bg },
+      tint: own ? coverColor(sb.img) : mainTint,
+    };
+  }
+
+  const slideBlob = (i: number) => new Promise<Blob | null>(resolve => {
+    const c = document.createElement('canvas');
+    const s = slideAt(i);
+    renderShare(c, s.books, s.opts, s.tint);
+    c.toBlob(resolve, 'image/jpeg', 0.92);
+  });
+
+  // Every slide, in order, as files.
+  const allFiles = async (): Promise<File[]> => {
+    const files: File[] = [];
+    for (let i = 0; i < slideCount; i++) {
+      const blob = await slideBlob(i);
+      if (blob) files.push(new File([blob], `bookshelf-${opts.size}-${i + 1}.jpg`, { type: 'image/jpeg' }));
+    }
+    return files;
+  };
+
+  const downloadFile = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
 
   const getBlob = async () => blobRef.current
     || await new Promise<Blob | null>(r => canvasRef.current ? canvasRef.current.toBlob(r, 'image/jpeg', 0.92) : r(null));
@@ -115,22 +217,36 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   const fileName = () => `bookshelf-${opts.size}.jpg`;
 
   const download = async () => {
+    if (carouselOn) {
+      // Several images download as one zip, in slide order.
+      setExporting(true);
+      const files = await allFiles();
+      const entries: Record<string, Uint8Array> = {};
+      for (const f of files) entries[f.name] = new Uint8Array(await f.arrayBuffer());
+      setExporting(false);
+      downloadFile(new Blob([zipSync(entries, { level: 0 })], { type: 'application/zip' }), `bookshelf-carousel-${opts.size}.zip`);
+      return;
+    }
     const blob = await getBlob();
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = fileName(); a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    downloadFile(blob, fileName());
   };
 
   const canShareFiles = typeof navigator !== 'undefined' && !!navigator.canShare
     && navigator.canShare({ files: [new File([new Blob()], 'x.jpg', { type: 'image/jpeg' })] });
 
   const share = async () => {
-    const blob = await getBlob();
-    if (!blob) return;
-    const file = new File([blob], fileName(), { type: 'image/jpeg' });
-    try { await navigator.share({ files: [file] }); }
+    let files: File[];
+    if (carouselOn) {
+      setExporting(true);
+      files = await allFiles();
+      setExporting(false);
+    } else {
+      const blob = await getBlob();
+      if (!blob) return;
+      files = [new File([blob], fileName(), { type: 'image/jpeg' })];
+    }
+    try { await navigator.share({ files }); }
     catch (e: any) { if (e?.name !== 'AbortError') { toast('Couldn\u2019t open sharing, so the image was downloaded.'); download(); } }
   };
 
@@ -150,7 +266,12 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     dragIdx.current = to;
   };
   const onStripUp = () => { dragIdx.current = null; };
-  const removeBook = (id: string) => setOrder(prev => prev.length > 1 ? prev.filter(b => b.id !== id) : prev);
+  const removeBook = (id: string) => setOrder(prev => prev.filter(b => b.id !== id));
+  const addItem = (b: Book) => setOrder(prev => prev.length < MAX_ITEMS ? [...prev, b] : prev);
+  const close = () => {
+    sessionExtras = order.filter(isTemp);
+    onClose(order.filter(b => !isTemp(b)));
+  };
 
   const size = SIZES[opts.size];
 
@@ -160,13 +281,13 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
       fontFamily: 'Manrope, system-ui, sans-serif', color: '#1a1a1a',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', paddingTop: 'max(10px, env(safe-area-inset-top))', background: '#fff', borderBottom: '1px solid #e5e5e5' }}>
-        <button onClick={() => onClose(order)} style={btn(true)} aria-label="Back to picking books"><ChevronLeft size={16} /></button>
+        <button onClick={close} style={btn(true)} aria-label="Back to picking books"><ChevronLeft size={16} /></button>
         <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Share Studio</span>
         <span style={{ fontSize: '0.75rem', color: '#999' }}>{order.length} {order.length === 1 ? 'book' : 'books'}</span>
         <div style={{ flex: 1 }} />
         {canShareFiles && <button onClick={download} style={btn(true)} title="Download"><Download size={15} /></button>}
-        <button onClick={canShareFiles ? share : download} style={btn(false)} disabled={busy}>
-          {canShareFiles ? <><Share2 size={14} /> Share</> : <><Download size={14} /> Download</>}
+        <button onClick={canShareFiles ? share : download} style={{ ...btn(false), ...(busy || exporting || !order.length ? { opacity: 0.5 } : {}) }} disabled={busy || exporting || !order.length}>
+          {canShareFiles ? <><Share2 size={14} /> Share{carouselOn ? ` ${slideCount}` : ''}</> : <><Download size={14} /> Download{carouselOn ? ` ${slideCount}` : ''}</>}
         </button>
       </div>
 
@@ -176,27 +297,40 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             <canvas ref={canvasRef} width={size.w} height={size.h}
               style={{ maxWidth: '100%', maxHeight: 'min(74vh, 900px)', width: 'auto', height: 'auto', aspectRatio: `${size.w} / ${size.h}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', background: '#fff' }} />
             {busy && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#999', lineHeight: 1.4 }}>Loading covers…</div>}
+            {!busy && !order.length && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#999', lineHeight: 1.4 }}>Add a book to begin</div>}
+            {slideCount > 1 && (
+              <div className="share-slides" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, lineHeight: 1 }}>
+                <button onClick={() => setSlide((current - 1 + slideCount) % slideCount)} style={navBtn} aria-label="Previous slide"><ChevronLeft size={16} /></button>
+                {Array.from({ length: slideCount }, (_, i) => (
+                  <button key={i} onClick={() => setSlide(i)} aria-label={`Slide ${i + 1}`} style={{ width: 22, height: 32, border: 'none', background: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 4, background: i === current ? '#1a1a1a' : '#c4c4c4' }} />
+                  </button>
+                ))}
+                <button onClick={() => setSlide((current + 1) % slideCount)} style={navBtn} aria-label="Next slide"><ChevronRight size={16} /></button>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="share-controls" style={{ flex: '1 1 300px', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <Section label="Books" hint={order.length > 1 ? 'Drag to reorder' : undefined}>
+          <Section label="Books" hint={order.some(isTemp) ? 'Dashed ones are just for sharing' : order.length > 1 ? 'Drag to reorder' : undefined}>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 8px 6px 2px' }}>
               {order.map((b, i) => (
                 <div key={b.id} data-strip={i}
                   onPointerDown={onStripDown(i)} onPointerMove={onStripMove} onPointerUp={onStripUp} onPointerCancel={onStripUp}
-                  style={{ position: 'relative', flexShrink: 0, width: 54, touchAction: 'none', cursor: order.length > 1 ? 'grab' : 'default', userSelect: 'none' }}>
+                  style={{ position: 'relative', flexShrink: 0, width: 54, touchAction: 'none', cursor: order.length > 1 ? 'grab' : 'default', userSelect: 'none',
+                    ...(isTemp(b) ? { outline: '1.5px dashed #8a8a8a', outlineOffset: 3, borderRadius: 3 } : {}) }}>
                   {isDecor(b) ? (
                     // A decoration at its size next to a paperback, standing on the bottom.
                     <div style={{ width: 54, height: 80, borderRadius: 3, overflow: 'hidden', background: '#f6f5f2', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                      {imgs.get(b.id) && <img src={imgs.get(b.id)!.src} alt="" draggable={false} style={{ height: `${(decorDefOf(b)?.height ?? 0.5) * 100}%`, maxWidth: '100%', objectFit: 'contain', objectPosition: 'bottom', display: 'block', pointerEvents: 'none' }} />}
+                      {imgs.get(b.id) && <img src={imgs.get(b.id)!.src} alt="" draggable={false} style={{ height: `${(decorHeight(b) ?? 0.5) * 100}%`, maxWidth: '100%', objectFit: 'contain', objectPosition: 'bottom', display: 'block', pointerEvents: 'none' }} />}
                     </div>
                   ) : (
                     <div style={{ width: 54, height: 80, borderRadius: 3, overflow: 'hidden', background: '#ddd', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}>
                       {imgs.get(b.id) && <img src={imgs.get(b.id)!.src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />}
                     </div>
                   )}
-                  {order.length > 1 && (
+                  {(order.length > 1 || isTemp(b)) && (
                     <button onPointerDown={e => e.stopPropagation()} onClick={() => removeBook(b.id)} aria-label={`Remove ${b.title}`}
                       style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, border: 'none', background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, cursor: 'pointer' }}>
                       <X size={12} />
@@ -205,6 +339,12 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   {order.length > 1 && <GripVertical size={12} style={{ position: 'absolute', bottom: 3, left: 3, color: '#fff', filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.8))' }} />}
                 </div>
               ))}
+              {order.length < MAX_ITEMS && (
+                <button onClick={() => setAdding(true)} aria-label="Add just for sharing" title="Add just for sharing"
+                  style={{ flexShrink: 0, width: 54, height: 80, borderRadius: 3, border: '1.5px dashed #bbb', background: '#fafafa', color: '#777', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: 'inherit', fontSize: 10, fontWeight: 600, padding: 0 }}>
+                  <Plus size={18} />Add
+                </button>
+              )}
             </div>
           </Section>
 
@@ -224,6 +364,26 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
               {single ? 'Feature shows one book with its details.' : 'Feature is for a single book.'}
             </div>
           </Section>
+
+          {order.length > 1 && features.length > 0 && (
+            <Section label="Carousel" hint={carouselOn ? `${slideCount} images` : undefined}>
+              <Toggle label="Add a slide for each book" checked={carousel.on} onChange={v => { setCarousel({ on: v }); setSlide(0); }} />
+              {carouselOn && (
+                <>
+                  <div style={{ fontSize: 12, color: '#999', margin: '8px 0 10px', lineHeight: 1.4 }}>
+                    After this image, each book gets its own feature. Decorations stay in the first one.
+                  </div>
+                  <Segmented value={carousel.bg} onChange={v => setCarousel({ bg: v as Carousel['bg'] })}
+                    items={[{ value: 'cover', label: 'Each cover’s color' }, { value: 'match', label: 'Same background' }]} />
+                  <Toggle label="Show synopsis" checked={carousel.synopsis} onChange={v => setCarousel({ synopsis: v })} />
+                  <div style={{ marginTop: 10 }}>
+                    <Segmented value={opts.align} onChange={v => set('align', v as 'left' | 'center')}
+                      items={[{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centered' }]} />
+                  </div>
+                </>
+              )}
+            </Section>
+          )}
 
           {layout === 'feature' && (
             <Section label="Feature">
@@ -276,6 +436,8 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         </div>
       </div>
 
+      {adding && <AddForShare gbKey={gbKey} summarize={summarize} onAdd={addItem} onClose={() => setAdding(false)} toast={toast} />}
+
       <style>{`
         @media (max-width: 700px) {
           /* Preview stays put at the top; the options scroll underneath it. */
@@ -283,7 +445,8 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
           .share-preview { position: static !important; flex: none !important; height: auto !important; align-self: stretch !important; padding: 12px; }
           .share-preview canvas { max-height: 42vh !important; }
           .share-controls { max-width: none !important; flex: 1 1 auto !important; min-height: 0; overflow-y: auto; padding: 12px 12px max(16px, env(safe-area-inset-bottom)) !important; gap: 12px !important; }
-          .share-studio input { font-size: 16px !important; }
+          .share-studio input, .share-add input, .share-add textarea { font-size: 16px !important; }
+          .share-slides { margin-top: 6px !important; }
         }
       `}</style>
     </div>
@@ -293,6 +456,11 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
 const input: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8,
   fontSize: 14, fontFamily: 'inherit', background: '#fff',
+};
+
+const navBtn: React.CSSProperties = {
+  width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none',
+  borderRadius: 8, cursor: 'pointer', padding: 0, color: '#555',
 };
 
 const btn = (secondary: boolean): React.CSSProperties => ({
