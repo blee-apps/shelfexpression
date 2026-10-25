@@ -219,7 +219,7 @@ const useWearArt = (book: Book, aspect: number, on: boolean) => {
   useEffect(() => {
     if (!WEAR_LV || !on) return;
     let live = true;
-    wearArt(book.title, book.author, aspect).then(a => { if (live) setArt(a); });
+    wearArt(book.title, book.author, aspect, WEAR).then(a => { if (live) setArt(a); });
     return () => { live = false; };
   }, [book.title, book.author, aspect, on]);
   return WEAR_LV && on ? art : null;
