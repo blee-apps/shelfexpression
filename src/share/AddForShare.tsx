@@ -2,7 +2,7 @@
 // decorations that aren't on your shelf. Whatever you add here lives only in
 // the studio for this visit. It's never saved, published or exported.
 import { useRef, useState } from 'react';
-import { X, Search, Upload, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Search, Upload, ChevronLeft, ChevronRight, Copy, ClipboardPaste } from 'lucide-react';
 import { searchBooks, BookResult, CoverCandidate } from '../bookSearch';
 import { fetchCover } from '../publish';
 import { prepareDecorImage } from '../decorUpload';
@@ -76,6 +76,19 @@ export default function AddForShare({ gbKey, summarize, onAdd, onClose, toast }:
     setUploaded(null);
     setSynopsis(r.synopses[0] || '');
     setYear(r.year ? String(r.year) : '');
+  };
+
+  // Copy and Paste make it easy to shorten a synopsis in another app,
+  // like ChatGPT or Claude, and bring the result back.
+  const copySynopsis = async () => {
+    try { await navigator.clipboard.writeText(synopsis.trim()); toast('Synopsis copied.'); }
+    catch { toast('Couldn\u2019t copy. Select the text and copy it instead.'); }
+  };
+  const pasteSynopsis = async () => {
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (text) setSynopsis(text); else toast('Nothing to paste. Copy some text first.');
+    } catch { toast('Couldn\u2019t paste. Tap in the box and paste there instead.'); }
   };
 
   const shorten = async () => {
@@ -198,8 +211,13 @@ export default function AddForShare({ gbKey, summarize, onAdd, onClose, toast }:
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   {!uploaded && covers.length > 1 && <button onClick={() => setCoverAt((coverAt - 1 + covers.length) % covers.length)} style={iconBtn} aria-label="Previous cover"><ChevronLeft size={16} /></button>}
-                  <div style={{ width: 84, height: 126, borderRadius: 4, overflow: 'hidden', background: '#eee', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
-                    {coverShown && <img src={coverShown} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 84, height: 126, borderRadius: 4, overflow: 'hidden', background: '#eee', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                      {coverShown && <img src={coverShown} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                    </div>
+                    <span className="cover-count" style={{ fontSize: 11, color: '#999', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {uploaded ? 'Your upload' : covers.length ? `${coverAt + 1} of ${covers.length}` : 'No covers'}
+                    </span>
                   </div>
                   {!uploaded && covers.length > 1 && <button onClick={() => setCoverAt((coverAt + 1) % covers.length)} style={iconBtn} aria-label="Next cover"><ChevronRight size={16} /></button>}
                 </div>
@@ -213,7 +231,11 @@ export default function AddForShare({ gbKey, summarize, onAdd, onClose, toast }:
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Synopsis</span>
-                {summarize && <button onClick={shorten} disabled={shortening || !synopsis.trim()} style={secondary}>{shortening ? 'Shortening\u2026' : 'Shorten'}</button>}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={copySynopsis} disabled={!synopsis.trim()} style={secondary} title="Copy the synopsis, to shorten it in another app"><Copy size={13} /> Copy</button>
+                  <button onClick={pasteSynopsis} style={secondary} title="Replace the synopsis with what you copied"><ClipboardPaste size={13} /> Paste</button>
+                  {summarize && <button onClick={shorten} disabled={shortening || !synopsis.trim()} style={secondary}>{shortening ? 'Shortening\u2026' : 'Shorten'}</button>}
+                </div>
               </div>
               <textarea value={synopsis} onChange={e => setSynopsis(e.target.value)} rows={6} placeholder="Shown on its feature slide" style={{ ...input, resize: 'vertical', lineHeight: 1.45 }} />
               <button onClick={addBook} disabled={adding} style={{ ...primary, justifyContent: 'center', minHeight: 42 }}>{adding ? 'Getting the cover\u2026' : 'Add to this set'}</button>
