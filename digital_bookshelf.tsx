@@ -313,21 +313,26 @@ const BillyStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
   const rowH = rows[0].bottom - rows[0].top;
   const board = Math.round(Math.min(22, Math.max(10, rowH * 0.075)));
   const plinth = Math.round(Math.min(64, Math.max(30, rowH * 0.26)));
-  const shelfTops = rows.map(r => r.bottom + PAD - 1);
+  // Seen from a little above, like the Vitsoe shelf: a strip of each shelf's
+  // top surface shows above its front edge, and the books stand on its front
+  // half, so the back half shows behind them.
+  const surface = Math.round(board * 1.2);
+  const shelfTops = rows.map(r => r.bottom + PAD - Math.round(surface * 0.55));
   const last = shelfTops[shelfTops.length - 1];
-  const height = last + board + plinth;
+  const height = last + surface + board + plinth;
   const holeStep = Math.max(14, Math.round(rowH * 0.15));
-  const style = { top: gridOffsetTop - PAD, left: -PAD, right: -PAD, height, '--board': `${board}px`, '--hole-step': `${holeStep}px` } as React.CSSProperties;
+  const style = { top: gridOffsetTop - PAD, left: -PAD, right: -PAD, height, '--board': `${board}px`, '--surface': `${surface}px`, '--hole-step': `${holeStep}px` } as React.CSSProperties;
   return (
     <div className="billy" style={style} aria-hidden="true">
       {rows.map((_, i) => {
-        const top = i === 0 ? board : shelfTops[i - 1] + board;
+        const top = i === 0 ? board : shelfTops[i - 1] + surface + board;
         return <div key={`c-${i}`} className="billy-row" style={{ top, height: shelfTops[i] - top }}>
           <div className="billy-bay billy-bay-a" /><div className="billy-bay billy-bay-b" />
         </div>;
       })}
       {shelfTops.map((t, i) => <div key={`s-${i}`} className={`billy-shelf${i === shelfTops.length - 1 ? ' billy-base' : ''}`} style={{ top: t }} />)}
-      <div className="billy-plinth" style={{ top: last + board, height: plinth }} />
+      <div className="billy-mid" style={{ height: last + surface }} />
+      <div className="billy-plinth" style={{ top: last + surface + board, height: plinth }} />
     </div>
   );
 };
@@ -1070,7 +1075,7 @@ export default function App() {
         /* ── Billy ─────────────────────────────────────────────────────── */
         .billy {
           position: absolute; pointer-events: none; z-index: 0;
-          --front: #f8f7f3; --edge: #d9d6cf; --back: #e7e4dd; --wall-in: #d8d4cb; --hole: rgba(60,55,45,0.45);
+          --front: #f8f7f3; --edge: #d9d6cf; --top-back: #e9e6df; --top-front: #f5f3ee; --back: #e7e4dd; --wall-in: #d8d4cb; --hole: rgba(60,55,45,0.45);
           background: var(--front);
           box-shadow: 0 0 0 1px rgba(0,0,0,0.07), 0 30px 40px -28px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.05);
           border-radius: 1px;
@@ -1096,15 +1101,17 @@ export default function App() {
         .billy-bay::before { left: 0; box-shadow: 2px 0 4px rgba(0,0,0,0.06); background-color: var(--wall-in); }
         .billy-bay::after { right: 0; box-shadow: -2px 0 4px rgba(0,0,0,0.04); }
         .billy-shelf {
-          position: absolute; left: 0; right: 0; height: var(--board); z-index: 1;
-          background: linear-gradient(to bottom, #fbfaf7 0, var(--front) 2px, var(--front) calc(100% - 2px), var(--edge) 100%);
+          position: absolute; left: 0; right: 0; height: calc(var(--surface) + var(--board)); z-index: 1;
+          /* top surface (shaded toward the back panel), then the front edge */
+          background: linear-gradient(to bottom, rgba(0,0,0,0.10) 0, var(--top-back) 1px, var(--top-front) var(--surface), #fdfcfa var(--surface), var(--front) calc(var(--surface) + 2px), var(--front) calc(100% - 2px), var(--edge) 100%);
           box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 8px 12px -6px rgba(0,0,0,0.22);
         }
         .billy-shelf:not(.billy-base) { left: 12px; right: 12px; }
+        .billy-mid { display: none; }
         @media (max-width: 767px) { .billy-shelf:not(.billy-base) { left: 9px; right: 9px; } }
         /* Wide screens: two units, so the shelves stop at their own sides */
         @media (min-width: 768px) {
-          .billy-shelf:not(.billy-base) { background-image: linear-gradient(to right, transparent calc(50% - 24px), var(--front) calc(50% - 24px), var(--front) calc(50% + 24px), transparent calc(50% + 24px)), linear-gradient(to bottom, #fbfaf7 0, var(--front) 2px, var(--front) calc(100% - 2px), var(--edge) 100%); }
+          .billy-mid { display: block; position: absolute; top: 0; left: calc(50% - 12px); width: 24px; z-index: 2; background: var(--front); }
           .billy::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0,0,0,0.10); z-index: 2; }
         }
         .billy-plinth {
@@ -1115,9 +1122,9 @@ export default function App() {
         .billy-plinth::before { left: -10px; } .billy-plinth::after { right: -10px; }
         @media (min-width: 768px) { .billy-plinth { background-image: linear-gradient(to right, transparent calc(50% - 10px), var(--front) calc(50% - 10px), var(--front) calc(50% + 10px), transparent calc(50% + 10px)), linear-gradient(to bottom, rgba(0,0,0,0.16), rgba(0,0,0,0.04) 8px, rgba(0,0,0,0) 40%); } }
         /* Dark mode: Billy in black-brown */
-        .dark .billy { --front: #3a332e; --edge: #241f1b; --back: #1e1b18; --wall-in: #2b2622; --hole: rgba(0,0,0,0.75);
+        .dark .billy { --front: #3a332e; --edge: #241f1b; --top-back: #2a2521; --top-front: #362f2a; --back: #1e1b18; --wall-in: #2b2622; --hole: rgba(0,0,0,0.75);
           box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 40px -28px rgba(0,0,0,0.8); }
-        .dark .billy-shelf { background: linear-gradient(to bottom, #4a423b 0, var(--front) 2px, var(--front) calc(100% - 2px), var(--edge) 100%); }
+        .dark .billy-shelf { background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0, var(--top-back) 1px, var(--top-front) var(--surface), #4a423b var(--surface), var(--front) calc(var(--surface) + 2px), var(--front) calc(100% - 2px), var(--edge) 100%); }
 
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
