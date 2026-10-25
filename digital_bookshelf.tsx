@@ -459,11 +459,15 @@ const BILLY_SCALE = 0.78;
 // narrow one fills the height and is narrower. The button is the cover's own
 // size, so the hover area and the rect the open animation starts from are the
 // cover, not the empty space above it.
-const ShelfSlot = ({ book, children }: { book: Book; children: (coverWidth: string) => React.ReactNode }) => {
+// In Billy each unit holds a pair, nudged a little toward each other: the
+// pin-hole walls make an evenly centered pair read as too far apart.
+const BILLY_NUDGE = 4; // % of the slot's grid cell
+
+const ShelfSlot = ({ book, col, children }: { book: Book; col?: number; children: (coverWidth: string) => React.ReactNode }) => {
   const aspect = useBookAspectRatio(book);
   const fit = Math.min(1, aspect / BOOK_ASPECT);
   return (
-    <div className="vitsoe-slot" style={SHELF_STYLE === 'billy' ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center' } : { aspectRatio: BOOK_ASPECT }}>
+    <div className="vitsoe-slot" style={SHELF_STYLE === 'billy' ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center', position: 'relative', left: col === undefined ? 0 : `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%` } : { aspectRatio: BOOK_ASPECT }}>
       {children(`${(fit * 100).toFixed(3)}%`)}
     </div>
   );
@@ -1021,6 +1025,7 @@ export default function App() {
   // kept within one bay of the shelf so it never straddles the middle track.
   // Decorations only stand on the Vitsoe shelf.
   const decorEls: Record<string, React.ReactNode> = {};
+  const colOf: Record<string, number> = {};
   if (USE_VITSOE_SHELF) {
     const cols = slot.cols || 1;
     let col = 0;
@@ -1036,6 +1041,8 @@ export default function App() {
         if (cols === 4 && col === 1) { col = 2; style.gridColumn = '3 / span 2'; }
         else style.gridColumn = 'span 2';
       }
+      colOf[item.id] = col;
+      if (def && span === 1 && SHELF_STYLE === 'billy') { style.position = 'relative'; style.left = `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%`; }
       if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={bookW / BOOK_ASPECT} slotStyle={style} />;
       col = (col + span) % cols;
     }
@@ -1362,7 +1369,7 @@ export default function App() {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
               return USE_VITSOE_SHELF ? (
-                <ShelfSlot key={book.id} book={book}>{coverWidth => (
+                <ShelfSlot key={book.id} book={book} col={colOf[book.id]}>{coverWidth => (
                 <button
                   type="button"
                   ref={el => { bookButtonRefs.current[book.id] = el; }}
