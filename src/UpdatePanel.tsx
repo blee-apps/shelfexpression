@@ -60,7 +60,7 @@ export default function UpdatePanel({ releases, guest, hasUnpublished, onClose }
   });
 
   const goLive = (prepared?: string) => run(async () => {
-    const sha = prepared || await prepareUpdate(token, plan!, text => setStage({ kind: 'working', text }));
+    const sha = prepared || await prepareUpdate(token, plan!, text => setStage({ kind: 'working', text }), false);
     setStage({ kind: 'working', text: 'Updating your live site\u2026' });
     const live = await finishUpdate(token, sha, plan!.version);
     setStage({ kind: 'live', sha: live, ready: false });

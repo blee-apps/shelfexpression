@@ -117,8 +117,11 @@ const toBase64 = (buf: ArrayBuffer) => {
   return btoa(s);
 };
 
-// Commits the update to its own branch, so the host can build a preview first.
-export async function prepareUpdate(token: string, plan: UpdatePlan, onStep?: (text: string) => void): Promise<string> {
+// Makes the update commit. For a preview it goes on its own branch, so the
+// host can build it first. Going straight live, it stays off any branch until
+// finishUpdate puts it on the live one: pushing the same commit to two
+// branches seconds apart can make the host build only the preview.
+export async function prepareUpdate(token: string, plan: UpdatePlan, onStep?: (text: string) => void, onBranch = true): Promise<string> {
   const gh = api(token);
   const repo = SITE.github.repo;
   const next = (await readTree(gh, UPSTREAM, `v${plan.version}`))!;
@@ -155,6 +158,7 @@ export async function prepareUpdate(token: string, plan: UpdatePlan, onStep?: (t
   } }, 'make the update');
   if (!commit.ok) throw new UpdateError(`Couldn\u2019t make the update (${commit.status}).`);
   const sha = (await commit.json()).sha;
+  if (!onBranch) return sha;
   const moved = await gh(repo, `git/refs/heads/${UPDATE_BRANCH}`, { method: 'PATCH', body: { sha, force: true } }, 'save the update');
   if (moved.status === 422 || moved.status === 404) {
     const made = await gh(repo, 'git/refs', { method: 'POST', body: { ref: `refs/heads/${UPDATE_BRANCH}`, sha } }, 'save the update');
