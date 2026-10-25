@@ -62,7 +62,7 @@ On the live site, **Publish** takes the place of Save. It commits your books and
 Tap **Create image** in the editor, or **Share** on a book. Pick up to 12 books in the order you want them, then tap **Next**. Share Studio fills the screen with a live preview. Drag the thumbnails to reorder or tap their X to drop one. You can choose:
 
 - **Sizes:** Story (9:16), Post (4:5) and Square.
-- **Layouts:** Grid, with optional titles, or Shelf. A single book gets Feature, aligned left or centered, with an optional synopsis.
+- **Layouts:** Grid, with optional titles, Vitsoe, or Billy (the two shelves from your site). A single book gets Feature, aligned left or centered, with an optional synopsis.
 - **Backgrounds:** Paper, White, Dark, a color taken from a cover (use the arrows beside the Cover swatch to choose which book), or any color you pick with Custom.
 - **Text:** an optional heading, and a footer line such as your website. The footer is remembered, and saved with your books when you publish.
 - **Add just for sharing:** tap **Add** at the end of the thumbnails to bring in a book that isn't on your shelf (search for it, flip through the covers found, and check the synopsis; **Copy** and **Paste** let you shorten it in an AI app and bring it back) or a decoration, including your own transparent PNG. These show with a dashed outline. They stay while you go back and forth to pick more books, and go when you close Share Studio. They're never saved, published or exported. You can even tap **Next** with nothing picked and build a set from scratch.
