@@ -1,6 +1,6 @@
 # Shelf Expression
 
-A beautiful, animated bookshelf for your website. Show off up to 48 books you love on a Vitsoe-style shelf or a minimal gallery, in light or dark. Click a cover and it lifts off the shelf, flies to the center and shows its synopsis and a Goodreads link. Page through with the arrow keys or, on a phone, a swipe that follows your finger.
+A beautiful, animated bookshelf for your website. Show off up to 48 books you love on a Vitsoe-style shelf, an IKEA Billy bookcase or a minimal gallery, in light or dark. Click a cover and it lifts off the shelf, flies to the center and shows its synopsis and a Goodreads link. Page through with the arrow keys or, on a phone, a swipe that follows your finger.
 
 Built with React, TypeScript, Tailwind CSS and Vite. It's a fully static site, so it's fast, free to host and has no database.
 
@@ -25,11 +25,11 @@ Open the editor with **Cmd+Shift+U** (Mac) or **Ctrl+Shift+U** (Windows and Linu
 
 In the editor, below the book grid, are two switches. Pick one of each:
 
-- **Shelf:** **Vitsoe**, a 606-style shelf with slim aluminum tracks and off-white steel shelves, where a hovered book leans from a corner and lifts as if you're picking it off the shelf. Or **Minimal**, covers on a flat background that grow slightly on hover.
+- **Shelf:** **Vitsoe**, a 606-style shelf with slim aluminum tracks and off-white steel shelves, where a hovered book leans from a corner and lifts as if you're picking it off the shelf. **Billy**, IKEA's classic white bookcase (black-brown in dark mode), two units side by side on a computer and one on a phone, with books a size smaller in its roomy compartments. Or **Minimal**, covers on a flat background that grow slightly on hover.
 - **Mode:** **Light**, **Dark** (a near-black page, with a graphite shelf on a charcoal wall), or **Auto**, which follows each visitor's device setting.
 - **Wear:** **Off**, **Light** or **Well-loved**. Makes the covers look read and handled, with spine creases, rubbed edges, soft corners and a little fading. Each book gets its own wear, and it always looks the same. Share Studio has the same choice for images, starting from the shelf's setting.
 
-They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`), `colorMode` (`light`, `dark` or `auto`) and `wear` (`light` or `heavy`, left out means off).
+They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`) plus `shelf: "billy"` for Billy, `colorMode` (`light`, `dark` or `auto`) and `wear` (`light` or `heavy`, left out means off).
 
 ### 4. Add your books
 
@@ -39,7 +39,7 @@ Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and
 2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
 3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**.
-5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker or film camera on the shelf. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations only show on the **Vitsoe** shelf, not the **Minimal** one.
+5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker or film camera on the shelf. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations show on the **Vitsoe** and **Billy** shelves, not the **Minimal** one.
 6. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
 
 ### 5. Publish
@@ -115,7 +115,7 @@ Everything works without keys. Add these to a `.env` file in the project folder 
 | `gr` | Goodreads book ID, used for the "View on Goodreads" link. |
 | `coverUrl` | The saved cover, such as `/covers/9780441478125.jpg`. |
 
-Up to four settings sit alongside the books: `useVitsoeShelf`, `colorMode` (`light`, `dark` or `auto`, left out means light), `wear` (`light` or `heavy`, left out means off), and `share.footer` (the footer line on share images).
+Up to four settings sit alongside the books: `useVitsoeShelf` (with `shelf: "billy"` for Billy), `colorMode` (`light`, `dark` or `auto`, left out means light), `wear` (`light` or `heavy`, left out means off), and `share.footer` (the footer line on share images).
 
 ## How it's put together
 

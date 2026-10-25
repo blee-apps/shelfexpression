@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
-import { Book, USE_VITSOE_SHELF, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
+import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
 import { prepareDecorImage } from './decorUpload';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
@@ -109,7 +109,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [editingIndex, setEditingIndex] = useState(-1);
   const [generatedCode, setGeneratedCode] = useState('');
   const [toast, setToast] = useState('');
-  const [useVitsoeShelf, setUseVitsoeShelf] = useState(USE_VITSOE_SHELF);
+  const [shelfStyle, setShelfStyle] = useState<ShelfStyle>(SHELF_STYLE);
+  const useVitsoeShelf = shelfStyle !== 'minimal';
   const [colorMode, setColorMode] = useState<ColorMode>(COLOR_MODE);
   const [wear, setWear] = useState<Wear>(WEAR);
 
@@ -183,7 +184,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   // Picks up settings saved alongside the books.
   const applyMeta = (data: any) => {
     if (data && !Array.isArray(data)) {
-      if (typeof data.useVitsoeShelf === 'boolean') setUseVitsoeShelf(data.useVitsoeShelf);
+      if (data.shelf === 'billy') setShelfStyle('billy');
+      else if (typeof data.useVitsoeShelf === 'boolean') setShelfStyle(data.useVitsoeShelf ? 'vitsoe' : 'minimal');
       setColorMode(data.colorMode === 'dark' || data.colorMode === 'auto' ? data.colorMode : 'light');
       setWear(isWear(data.wear) ? data.wear : 'off');
       if (typeof data.share?.footer === 'string') setShareFooter(data.share.footer);
@@ -319,7 +321,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       fillSlots(parsed);
       const vitsoeMatch = text.match(/USE_VITSOE_SHELF\s*=\s*(true|false)/);
       if (vitsoeMatch) {
-        setUseVitsoeShelf(vitsoeMatch[1] === 'true');
+        setShelfStyle(vitsoeMatch[1] === 'true' ? 'vitsoe' : 'minimal');
       }
     } catch (err: any) {
       showToast('Error: ' + err.message);
@@ -767,7 +769,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       if (book.coverUrl) entry.coverUrl = book.coverUrl;
       return entry;
     });
-    const data: Record<string, unknown> = { useVitsoeShelf, colorMode, books };
+    // useVitsoeShelf stays for older builds; Billy is a Vitsoe-style layout.
+    const data: Record<string, unknown> = { useVitsoeShelf, ...(shelfStyle === 'billy' ? { shelf: 'billy' } : {}), colorMode, books };
     if (wear !== 'off') data.wear = wear;
     if (shareFooter !== undefined) data.share = { footer: shareFooter };
     return JSON.stringify(data, null, 2) + '\n';
@@ -1375,8 +1378,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 
         {/* LOOK: shelf style and light/dark, published with the books */}
         <div className="admin-look" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px', alignItems: 'center', justifyContent: 'center', margin: '0 0 22px' }}>
-          <LookSwitch label="Shelf" value={useVitsoeShelf ? 'vitsoe' : 'minimal'} onChange={v => setUseVitsoeShelf(v === 'vitsoe')}
-            items={[{ value: 'minimal', label: 'Minimal' }, { value: 'vitsoe', label: 'Vitsoe' }]} />
+          <LookSwitch label="Shelf" value={shelfStyle} onChange={v => setShelfStyle(v as ShelfStyle)}
+            items={[{ value: 'minimal', label: 'Minimal' }, { value: 'vitsoe', label: 'Vitsoe' }, { value: 'billy', label: 'Billy' }]} />
           <LookSwitch label="Mode" value={colorMode} onChange={v => setColorMode(v as ColorMode)}
             items={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'auto', label: 'Auto' }]}
             title="Auto follows each visitor's device setting" />
@@ -1977,7 +1980,7 @@ function MinimalDecorWarning() {
   return (
     <div role="note" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 12px', marginBottom: 12, borderRadius: 8, background: '#fff8e6', border: '1px solid #f0e0b0', fontSize: '0.78rem', lineHeight: 1.45, color: '#5c4a1a' }}>
       <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-      <span>Decorations only show on the Vitsoe shelf. With the Minimal shelf they stay in your list but won&rsquo;t appear on the site.</span>
+      <span>Decorations only show on the Vitsoe and Billy shelves. With the Minimal shelf they stay in your list but won&rsquo;t appear on the site.</span>
     </div>
   );
 }

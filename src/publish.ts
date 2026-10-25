@@ -76,7 +76,7 @@ export async function fetchCover(src: string): Promise<Blob> {
 
 // --- Commit message -------------------------------------------------------
 type BookLike = { title: string; author: string; isbn?: string; year?: number; synopsis?: string; gr?: string; coverUrl?: string; type?: string; decor?: string; label?: string; src?: string; height?: number };
-type Shelf = { useVitsoeShelf: boolean; colorMode?: string; wear?: string; books: BookLike[]; share?: { footer?: string } };
+type Shelf = { useVitsoeShelf: boolean; shelf?: string; colorMode?: string; wear?: string; books: BookLike[]; share?: { footer?: string } };
 
 const quote = (titles: string[]) => titles.map(t => `\u201c${t}\u201d`).join(', ');
 
@@ -115,7 +115,9 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (added.length) details.unshift(`Added ${quote(added)}`);
   if (removed.length) details.splice(added.length ? 1 : 0, 0, `Removed ${quote(removed)}`);
   if (reordered) details.push('Changed the order');
-  if (before.useVitsoeShelf !== after.useVitsoeShelf) details.push(after.useVitsoeShelf ? 'Turned on the Vitsoe shelf' : 'Turned off the Vitsoe shelf');
+  const shelfName = (x: Shelf) => x.shelf === 'billy' ? 'Billy' : x.useVitsoeShelf ? 'Vitsoe' : 'Minimal';
+  const shelfChanged = shelfName(before) !== shelfName(after);
+  if (shelfChanged) details.push(`Shelf: ${shelfName(after)}`);
   const modeBefore = before.colorMode || 'light', modeAfter = after.colorMode || 'light';
   const modeChanged = modeBefore !== modeAfter;
   if (modeChanged) details.push(`Color mode: ${modeAfter}`);
@@ -129,7 +131,7 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (updated.length) parts.push(updated.length === 1 ? `update ${quote(updated)}` : `update ${updated.length} books`);
   if (decorChanged) parts.push('change decorations');
   if (reordered && !parts.length) parts.push('reorder books');
-  if (!parts.length && before.useVitsoeShelf !== after.useVitsoeShelf) parts.push('change shelf style');
+  if (!parts.length && shelfChanged) parts.push('change shelf style');
   if (!parts.length && modeChanged) parts.push(`switch to ${modeAfter} mode`);
   if (!parts.length && wearChanged) parts.push('change cover wear');
   const footerChanged = (before.share?.footer ?? '') !== (after.share?.footer ?? '');
@@ -161,7 +163,7 @@ export const canonicalShelf = (json: string) => {
       if (b.coverUrl) e.coverUrl = b.coverUrl;
       return e;
     });
-    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, colorMode: d.colorMode || 'light', wear: d.wear === 'light' || d.wear === 'heavy' ? d.wear : 'off', books, footer: d.share?.footer ?? null });
+    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, shelf: d.shelf === 'billy' ? 'billy' : null, colorMode: d.colorMode || 'light', wear: d.wear === 'light' || d.wear === 'heavy' ? d.wear : 'off', books, footer: d.share?.footer ?? null });
   } catch { return json; }
 };
 const normalize = canonicalShelf;
