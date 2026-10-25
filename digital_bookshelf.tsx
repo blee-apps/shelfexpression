@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, WEAR, isDecor } from './src/books';
-import { wearFor, wearLevel } from './src/wear';
+import { wearOverlay, wearLevel } from './src/wear';
 import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
 
@@ -208,18 +208,22 @@ const DynamicCover = ({ book, eager = false }: { book: Book; eager?: boolean }) 
   );
 };
 
-// Worn look over a cover (see src/wear.ts): a slight fade, then the shade
-// and rub layers. The share images draw the same layers the same way.
+// Worn look over a cover (see src/wear.ts): a slight fade, then the book's
+// own wear overlay. The share images draw the same layers the same way.
 const WEAR_LV = wearLevel(WEAR);
 const WearLayers = ({ book }: { book: Book }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!WEAR_LV) return;
+    let live = true;
+    wearOverlay(book.title, book.author).then(u => { if (live) setUrl(u); });
+    return () => { live = false; };
+  }, [book.title, book.author]);
   if (!WEAR_LV) return null;
-  const t = wearFor(book.title, book.author);
-  const layer: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: WEAR_LV.strength, transform: t.flip ? 'scaleY(-1)' : undefined };
   return (
     <div aria-hidden className="absolute inset-0" style={{ pointerEvents: 'none' }}>
       <div style={{ position: 'absolute', inset: 0, background: '#808080', mixBlendMode: 'saturation', opacity: WEAR_LV.fade }} />
-      <img src={t.shade} alt="" draggable={false} style={layer} />
-      <img src={t.rub} alt="" draggable={false} style={layer} />
+      {url && <img src={url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: WEAR_LV.strength }} />}
     </div>
   );
 };
