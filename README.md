@@ -65,9 +65,9 @@ Tap **Create image** in the editor, or **Share** on a book. Pick up to 12 books 
 - **Backgrounds:** Paper, White, Dark, or a color taken from a cover. Use the arrows beside the Cover swatch to choose which book.
 - **Text:** an optional heading, and a footer line such as your website. The footer is remembered, and saved with your books when you publish.
 - **Add just for sharing:** tap **Add** at the end of the thumbnails to bring in a book that isn't on your shelf (search for it, check the cover and synopsis) or a decoration, including your own transparent PNG. These show with a dashed outline. They stay while you go back and forth to pick more books, and go when you close Share Studio. They're never saved, published or exported. You can even tap **Next** with nothing picked and build a set from scratch.
-- **Carousel:** with more than one book, turn on **Add a slide for each book**. After the main image, each book gets its own feature slide, on its own cover's color or the same background, with or without its synopsis. Decorations stay in the main image. Use the dots under the preview to look through the slides.
+- **Carousel:** with more than one book, turn on **Add a slide for each book**. After the main image, each book gets its own feature slide, all on one background (each book's own cover color, Paper, White, Dark, or a custom color), with or without its synopsis. Decorations stay in the main image. Use the dots under the preview to look through the slides.
 
-On an iPhone, **Share** opens the share sheet, so you can save the image (or every slide of a carousel, in order) to Photos or post it straight to Instagram. Elsewhere, it downloads, and a carousel comes as one zip.
+On an iPhone, **Share** opens the share sheet, so you can save the image to Photos or post it straight to Instagram. Elsewhere, it downloads. A carousel's **Save images** shows every slide in order, each with its own **Save** button, plus **Share all** (or, on a computer, **Download all** as a zip).
 
 ### 7. Host it yourself, without GitHub
 

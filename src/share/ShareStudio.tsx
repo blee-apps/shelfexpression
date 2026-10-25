@@ -17,11 +17,19 @@ let sessionExtras: Book[] = [];
 export const clearShareExtras = () => { sessionExtras = []; };
 
 // Carousel: after the main image, one feature slide for each book.
-type Carousel = { on: boolean; bg: 'cover' | 'match'; synopsis: boolean };
+// Every feature slide shares one background: each book's own cover color,
+// Paper, White, Dark, or a color you pick.
+type FeatureBg = 'cover' | 'paper' | 'white' | 'dark' | 'custom';
+type Carousel = { on: boolean; bg: FeatureBg; custom: string; synopsis: boolean };
 const CAROUSEL_KEY = 'bookshelf.shareCarousel';
 const loadCarousel = (): Carousel => {
-  const d: Carousel = { on: false, bg: 'cover', synopsis: true };
-  try { return { ...d, ...JSON.parse(localStorage.getItem(CAROUSEL_KEY) || '{}') }; } catch { return d; }
+  const d: Carousel = { on: false, bg: 'cover', custom: '#3d4a5c', synopsis: true };
+  try {
+    const c = { ...d, ...JSON.parse(localStorage.getItem(CAROUSEL_KEY) || '{}') };
+    if (!['cover', 'paper', 'white', 'dark', 'custom'].includes(c.bg)) c.bg = 'cover';
+    if (!/^#[0-9a-f]{6}$/i.test(c.custom)) c.custom = d.custom;
+    return c;
+  } catch { return d; }
 };
 
 const loadDirect = (url?: string): Promise<HTMLImageElement | null> => new Promise(resolve => {
@@ -65,6 +73,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   });
   const [slide, setSlide] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [outputs, setOutputs] = useState<{ file: File; url: string }[] | null>(null);
   const [opts, setOpts] = useState<ShareOptions>(loadOptions);
   const [imgs, setImgs] = useState<Map<string, HTMLImageElement | null>>(new Map());
   const [busy, setBusy] = useState(true);
@@ -179,11 +188,14 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     if (i === 0) return { books: shareBooks, opts: main, tint: mainTint };
     const b = features[i - 1];
     const sb = shareBooks[order.indexOf(b)];
-    const own = carousel.bg === 'cover';
+    // A picked color is drawn like a cover color: the text turns light or
+    // dark to suit it.
+    const fb = carousel.bg;
+    const tint = fb === 'cover' ? coverColor(sb.img) : fb === 'custom' ? hexRgb(carousel.custom) : null;
     return {
       books: [sb],
-      opts: { ...main, layout: 'feature', heading: '', synopsis: carousel.synopsis, bg: own ? 'cover' : opts.bg },
-      tint: own ? coverColor(sb.img) : mainTint,
+      opts: { ...main, layout: 'feature', heading: '', synopsis: carousel.synopsis, bg: fb === 'cover' || fb === 'custom' ? 'cover' : fb },
+      tint,
     };
   }
 
@@ -216,17 +228,40 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
 
   const fileName = () => `bookshelf-${opts.size}.jpg`;
 
-  const download = async () => {
-    if (carouselOn) {
-      // Several images download as one zip, in slide order.
-      setExporting(true);
-      const files = await allFiles();
-      const entries: Record<string, Uint8Array> = {};
-      for (const f of files) entries[f.name] = new Uint8Array(await f.arrayBuffer());
-      setExporting(false);
-      downloadFile(new Blob([zipSync(entries, { level: 0 })], { type: 'application/zip' }), `bookshelf-carousel-${opts.size}.zip`);
-      return;
+  // A carousel opens a sheet with every image and a Save button for each.
+  const openOutputs = async () => {
+    setExporting(true);
+    const files = await allFiles();
+    setExporting(false);
+    setOutputs(files.map(file => ({ file, url: URL.createObjectURL(file) })));
+  };
+  const closeOutputs = () => {
+    outputs?.forEach(o => URL.revokeObjectURL(o.url));
+    setOutputs(null);
+  };
+  // One image: the share sheet where there is one (Save Image on an
+  // iPhone), otherwise a download.
+  const saveOne = async (file: File) => {
+    if (canShareFiles) {
+      try { await navigator.share({ files: [file] }); return; }
+      catch (e: any) { if (e?.name === 'AbortError') return; }
     }
+    downloadFile(file, file.name);
+  };
+  const shareAll = async () => {
+    if (!outputs) return;
+    try { await navigator.share({ files: outputs.map(o => o.file) }); }
+    catch (e: any) { if (e?.name !== 'AbortError') toast('Couldn\u2019t open sharing. Save them one by one instead.'); }
+  };
+  // On a computer, all of them at once come as one zip, in slide order.
+  const zipAll = () => {
+    if (!outputs) return;
+    Promise.all(outputs.map(async o => [o.file.name, new Uint8Array(await o.file.arrayBuffer())] as const)).then(list => {
+      downloadFile(new Blob([zipSync(Object.fromEntries(list), { level: 0 })], { type: 'application/zip' }), `bookshelf-carousel-${opts.size}.zip`);
+    });
+  };
+
+  const download = async () => {
     const blob = await getBlob();
     if (!blob) return;
     downloadFile(blob, fileName());
@@ -236,16 +271,9 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     && navigator.canShare({ files: [new File([new Blob()], 'x.jpg', { type: 'image/jpeg' })] });
 
   const share = async () => {
-    let files: File[];
-    if (carouselOn) {
-      setExporting(true);
-      files = await allFiles();
-      setExporting(false);
-    } else {
-      const blob = await getBlob();
-      if (!blob) return;
-      files = [new File([blob], fileName(), { type: 'image/jpeg' })];
-    }
+    const blob = await getBlob();
+    if (!blob) return;
+    const files = [new File([blob], fileName(), { type: 'image/jpeg' })];
     try { await navigator.share({ files }); }
     catch (e: any) { if (e?.name !== 'AbortError') { toast('Couldn\u2019t open sharing, so the image was downloaded.'); download(); } }
   };
@@ -285,9 +313,9 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Share Studio</span>
         <span style={{ fontSize: '0.75rem', color: '#999' }}>{order.length} {order.length === 1 ? 'book' : 'books'}</span>
         <div style={{ flex: 1 }} />
-        {canShareFiles && <button onClick={download} style={btn(true)} title="Download"><Download size={15} /></button>}
-        <button onClick={canShareFiles ? share : download} style={{ ...btn(false), ...(busy || exporting || !order.length ? { opacity: 0.5 } : {}) }} disabled={busy || exporting || !order.length}>
-          {canShareFiles ? <><Share2 size={14} /> Share{carouselOn ? ` ${slideCount}` : ''}</> : <><Download size={14} /> Download{carouselOn ? ` ${slideCount}` : ''}</>}
+        {canShareFiles && !carouselOn && <button onClick={download} style={btn(true)} title="Download"><Download size={15} /></button>}
+        <button onClick={carouselOn ? openOutputs : canShareFiles ? share : download} style={{ ...btn(false), ...(busy || exporting || !order.length ? { opacity: 0.5 } : {}) }} disabled={busy || exporting || !order.length}>
+          {carouselOn ? <><Download size={14} /> Save {slideCount} images</> : canShareFiles ? <><Share2 size={14} /> Share</> : <><Download size={14} /> Download</>}
         </button>
       </div>
 
@@ -373,8 +401,23 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   <div style={{ fontSize: 12, color: '#999', margin: '8px 0 10px', lineHeight: 1.4 }}>
                     After this image, each book gets its own feature. Decorations stay in the first one.
                   </div>
-                  <Segmented value={carousel.bg} onChange={v => setCarousel({ bg: v as Carousel['bg'] })}
-                    items={[{ value: 'cover', label: 'Each cover’s color' }, { value: 'match', label: 'Same background' }]} />
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 8 }}>Feature background</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {([['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Each cover'], ['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark']] as [FeatureBg, string, string][]).map(([v, color, label]) => (
+                      <button key={v} onClick={() => setCarousel({ bg: v })} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: color, border: '1px solid #ddd', outline: carousel.bg === v ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
+                        <div style={{ fontSize: 11, color: carousel.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
+                      </button>
+                    ))}
+                    {/* Your own color: tapping the swatch opens the color picker. */}
+                    <label style={{ cursor: 'pointer', textAlign: 'center', position: 'relative' }} onClick={() => setCarousel({ bg: 'custom' })}>
+                      <div style={{ width: 40, height: 40, borderRadius: 20, background: carousel.custom, border: '1px solid #ddd', outline: carousel.bg === 'custom' ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
+                      <div style={{ fontSize: 11, color: carousel.bg === 'custom' ? '#1a1a1a' : '#888', marginTop: 5 }}>Custom</div>
+                      <input type="color" value={carousel.custom} aria-label="Custom background color"
+                        onChange={e => setCarousel({ bg: 'custom', custom: e.target.value })}
+                        style={{ position: 'absolute', top: 0, left: 0, width: 40, height: 40, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
+                    </label>
+                  </div>
                   <Toggle label="Show synopsis" checked={carousel.synopsis} onChange={v => setCarousel({ synopsis: v })} />
                   <div style={{ marginTop: 10 }}>
                     <Segmented value={opts.align} onChange={v => set('align', v as 'left' | 'center')}
@@ -398,7 +441,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </Section>
           )}
 
-          <Section label="Background">
+          <Section label="Background" hint={carouselOn ? 'First image' : undefined}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               {([['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark'], ['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Cover']] as [ShareBg, string, string][]).map(([v, color, label]) => (
                 <button key={v} onClick={() => set('bg', v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
@@ -436,6 +479,35 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         </div>
       </div>
 
+      {outputs && (
+        <div className="share-outputs" style={{ position: 'fixed', inset: 0, zIndex: 10002, background: '#efefef', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', paddingTop: 'max(10px, env(safe-area-inset-top))', background: '#fff', borderBottom: '1px solid #e5e5e5' }}>
+            <button onClick={closeOutputs} style={btn(true)} aria-label="Back to editing"><ChevronLeft size={16} /></button>
+            <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{outputs.length} images</span>
+            <div style={{ flex: 1 }} />
+            {canShareFiles
+              ? <button onClick={shareAll} style={btn(false)}><Share2 size={14} /> Share all</button>
+              : <button onClick={zipAll} style={btn(false)}><Download size={14} /> Download all (zip)</button>}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+            <div style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 14, lineHeight: 1.4 }}>
+              In carousel order. {canShareFiles ? 'Save opens the share sheet, where you can tap Save Image.' : 'Save downloads that image.'}
+            </div>
+            <div className="share-outputs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, maxWidth: 1100, margin: '0 auto' }}>
+              {outputs.map((o, i) => (
+                <div key={o.url} style={{ background: '#fff', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <img src={o.url} alt={`Image ${i + 1}`} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, color: '#888' }}>{i + 1} of {outputs.length}</span>
+                    <button onClick={() => saveOne(o.file)} style={btn(false)}><Download size={14} /> Save</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {adding && <AddForShare gbKey={gbKey} summarize={summarize} onAdd={addItem} onClose={() => setAdding(false)} toast={toast} />}
 
       <style>{`
@@ -447,6 +519,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
           .share-controls { max-width: none !important; flex: 1 1 auto !important; min-height: 0; overflow-y: auto; padding: 12px 12px max(16px, env(safe-area-inset-bottom)) !important; gap: 12px !important; }
           .share-studio input, .share-add input, .share-add textarea { font-size: 16px !important; }
           .share-slides { margin-top: 6px !important; }
+          .share-outputs-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
         }
       `}</style>
     </div>
@@ -457,6 +530,9 @@ const input: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8,
   fontSize: 14, fontFamily: 'inherit', background: '#fff',
 };
+
+const hexRgb = (h: string): [number, number, number] =>
+  [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 
 const navBtn: React.CSSProperties = {
   width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none',
