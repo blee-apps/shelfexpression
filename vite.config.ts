@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { writeFile, readFile, cp, readdir, rm } from 'fs/promises'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { resolve } from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -197,7 +197,7 @@ const detectCommit = (): string => {
 };
 
 export default defineConfig({
-  define: { __SHELF_REPO__: JSON.stringify(detectRepo()), __SHELF_COMMIT__: JSON.stringify(detectCommit()) },
+  define: { __SHELF_REPO__: JSON.stringify(detectRepo()), __SHELF_COMMIT__: JSON.stringify(detectCommit()), __SHELF_VERSION__: JSON.stringify(JSON.parse(readFileSync('package.json', 'utf8')).version) },
   plugins: [react(), coversPlugin, siteFilesPlugin, exportPlugin, {
     name: 'cover-upload',
     configureServer(server) {
