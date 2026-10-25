@@ -1281,7 +1281,7 @@ export default function App() {
         }
       `}</style>
 
-      <header ref={headerRef} className={`w-full py-6 px-6 md:px-12 flex items-center justify-between border-b border-gray-100 dark:border-white/10 transition-opacity duration-300 ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <header ref={headerRef} className={`w-full py-6 px-6 md:px-12 flex items-center justify-between transition-opacity duration-300 ${animState !== 'idle' && animState !== 'closing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {SITE.url ? (
           <a href={SITE.url} className="font-semibold text-lg tracking-tight hover:text-gray-600 dark:hover:text-neutral-300 transition-colors">
             {SITE.name}
@@ -1327,7 +1327,7 @@ export default function App() {
           style={{ transition: mobileMenuOpen ? 'opacity 200ms ease-out' : 'opacity 180ms ease-in, visibility 0s linear 180ms' }}
           aria-hidden={!mobileMenuOpen}
         >
-            <div className="py-6 px-6 border-b border-gray-100 dark:border-white/10 flex justify-end">
+            <div className="py-6 px-6 flex justify-end">
               <button
                 className="p-2 text-gray-600 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
