@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { X, Share2, Download, GripVertical, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { zipSync } from 'fflate';
-import { isDecor, type Book } from '../books';
+import { isDecor, WEAR, type Book } from '../books';
+import { wornCover, isWear, WEAR_OPTIONS, type Wear } from '../wear';
 import { decorDefOf } from '../decor';
 import { renderShare, morphShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 import AddForShare, { isTemp } from './AddForShare';
@@ -47,8 +48,14 @@ const decorHeight = (b: Book) => isDecor(b) ? decorDefOf(b)?.height ?? b.height 
 const OPTIONS_KEY = 'bookshelf.shareOptions';
 
 const loadOptions = (): ShareOptions => {
-  try { return { ...DEFAULT_OPTIONS, ...JSON.parse(localStorage.getItem(OPTIONS_KEY) || '{}'), heading: '' }; }
-  catch { return { ...DEFAULT_OPTIONS }; }
+  // Wear starts as the shelf's own setting until you pick one here.
+  const base = { ...DEFAULT_OPTIONS, wear: WEAR };
+  try {
+    const o = { ...base, ...JSON.parse(localStorage.getItem(OPTIONS_KEY) || '{}'), heading: '' };
+    if (!isWear(o.wear)) o.wear = WEAR;
+    return o;
+  }
+  catch { return base; }
 };
 
 interface Props {
@@ -116,8 +123,24 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
+  // Worn copies of the covers, made when Wear is on.
+  const [worn, setWorn] = useState<Map<string, HTMLImageElement>>(() => new Map());
+  useEffect(() => {
+    if (opts.wear === 'off') return;
+    let cancelled = false;
+    const todo = order.filter(b => !isDecor(b) && imgs.get(b.id) && !worn.has(`${b.id}|${opts.wear}`));
+    if (!todo.length) return;
+    Promise.all(todo.map(async b => [`${b.id}|${opts.wear}`, await wornCover(imgs.get(b.id)!, b.title, b.author, opts.wear)] as const)).then(entries => {
+      if (cancelled) return;
+      setWorn(prev => { const next = new Map(prev); entries.forEach(([k, v]) => next.set(k, v)); return next; });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order, imgs, opts.wear]);
+  const coverOf = (b: Book) => (opts.wear !== 'off' && !isDecor(b) && worn.get(`${b.id}|${opts.wear}`)) || imgs.get(b.id) || null;
+
   const shareBooks: ShareBook[] = order.map(b => ({
-    title: b.title, author: b.author, year: b.year, synopsis: b.synopsis, img: imgs.get(b.id) ?? null,
+    title: b.title, author: b.author, year: b.year, synopsis: b.synopsis, img: coverOf(b),
     decor: decorHeight(b),
   }));
   // Carousel slides: the main image, then a feature for each book in it.
@@ -178,7 +201,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     blobRef.current = null;
     stopMorph.current = morphShare(canvas, prev!.books, prev!.opts, shareBooks, next, tint, 480, () => { stopMorph.current = null; saveBlob(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, fontsReady, order, opts, footer, imgs, tintImg, current, carouselOn, carousel]);
+  }, [busy, fontsReady, order, opts, footer, imgs, worn, tintImg, current, carouselOn, carousel]);
   useEffect(() => () => stopMorph.current?.(), []);
 
   // What slide i shows: 0 is the main image, then one feature per book.
@@ -391,6 +414,10 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>
               {single ? 'Feature shows one book with its details.' : 'Feature is for a single book.'}
             </div>
+          </Section>
+
+          <Section label="Wear">
+            <Segmented value={opts.wear} onChange={v => set('wear', v as Wear)} items={WEAR_OPTIONS} />
           </Section>
 
           {layout === 'feature' && (

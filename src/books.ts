@@ -1,3 +1,4 @@
+import { Wear, isWear } from './wear';
 // Your books live in content/books.json. This file just reads them in
 // (or the copy inside index.html on a site made with Create Static Site).
 import { SHELF_CONTENT as content } from './shelfData';
@@ -55,6 +56,10 @@ export const RAW_ITEMS: RawBook[] = (content.books as any[]).map(toItem);
 export const RAW_BOOKS: RawBook[] = RAW_ITEMS.filter(b => !isDecor(b));
 
 export const USE_VITSOE_SHELF: boolean = content.useVitsoeShelf;
+
+// Worn covers: off, light, or heavy (Well-loved).
+const wearSetting = (content as { wear?: string }).wear;
+export const WEAR: Wear = isWear(wearSetting) ? wearSetting : 'off';
 
 // Light, dark, or auto (follows each visitor's device setting).
 export type ColorMode = 'light' | 'dark' | 'auto';

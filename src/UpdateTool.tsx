@@ -1,7 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
-import { Book, USE_VITSOE_SHELF, COLOR_MODE, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
+import { WEAR_OPTIONS, isWear, type Wear } from './wear';
+import { Book, USE_VITSOE_SHELF, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
 import { prepareDecorImage } from './decorUpload';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
@@ -110,6 +111,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [toast, setToast] = useState('');
   const [useVitsoeShelf, setUseVitsoeShelf] = useState(USE_VITSOE_SHELF);
   const [colorMode, setColorMode] = useState<ColorMode>(COLOR_MODE);
+  const [wear, setWear] = useState<Wear>(WEAR);
 
   // Publishing (live site only). `baseJson` is the books.json this editor
   // started from, so Publish can tell if GitHub changed in the meantime.
@@ -183,6 +185,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     if (data && !Array.isArray(data)) {
       if (typeof data.useVitsoeShelf === 'boolean') setUseVitsoeShelf(data.useVitsoeShelf);
       setColorMode(data.colorMode === 'dark' || data.colorMode === 'auto' ? data.colorMode : 'light');
+      setWear(isWear(data.wear) ? data.wear : 'off');
       if (typeof data.share?.footer === 'string') setShareFooter(data.share.footer);
     }
   };
@@ -765,6 +768,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       return entry;
     });
     const data: Record<string, unknown> = { useVitsoeShelf, colorMode, books };
+    if (wear !== 'off') data.wear = wear;
     if (shareFooter !== undefined) data.share = { footer: shareFooter };
     return JSON.stringify(data, null, 2) + '\n';
   };
@@ -1376,6 +1380,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
           <LookSwitch label="Mode" value={colorMode} onChange={v => setColorMode(v as ColorMode)}
             items={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'auto', label: 'Auto' }]}
             title="Auto follows each visitor's device setting" />
+          <LookSwitch label="Wear" value={wear} onChange={v => setWear(v as Wear)} items={WEAR_OPTIONS}
+            title="Makes the covers look read and handled" />
         </div>
         {hasDecor && !useVitsoeShelf && <div style={{ margin: '-10px auto 22px', maxWidth: 520 }}><MinimalDecorWarning /></div>}
 

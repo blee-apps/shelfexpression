@@ -27,8 +27,9 @@ In the editor, below the book grid, are two switches. Pick one of each:
 
 - **Shelf:** **Vitsoe**, a 606-style shelf with slim aluminum tracks and off-white steel shelves, where a hovered book leans from a corner and lifts as if you're picking it off the shelf. Or **Minimal**, covers on a flat background that grow slightly on hover.
 - **Mode:** **Light**, **Dark** (a near-black page, with a graphite shelf on a charcoal wall), or **Auto**, which follows each visitor's device setting.
+- **Wear:** **Off**, **Light** or **Well-loved**. Makes the covers look read and handled, with spine creases, rubbed edges, soft corners and a little fading. Each book gets its own wear, and it always looks the same. Share Studio has the same choice for images, starting from the shelf's setting.
 
-They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`) and `colorMode` (`light`, `dark` or `auto`).
+They're saved in `content/books.json` as `useVitsoeShelf` (`true` or `false`), `colorMode` (`light`, `dark` or `auto`) and `wear` (`light` or `heavy`, left out means off).
 
 ### 4. Add your books
 
@@ -114,7 +115,7 @@ Everything works without keys. Add these to a `.env` file in the project folder 
 | `gr` | Goodreads book ID, used for the "View on Goodreads" link. |
 | `coverUrl` | The saved cover, such as `/covers/9780441478125.jpg`. |
 
-Up to three settings sit alongside the books: `useVitsoeShelf`, `colorMode` (`light`, `dark` or `auto`, left out means light), and `share.footer` (the footer line on share images).
+Up to four settings sit alongside the books: `useVitsoeShelf`, `colorMode` (`light`, `dark` or `auto`, left out means light), `wear` (`light` or `heavy`, left out means off), and `share.footer` (the footer line on share images).
 
 ## How it's put together
 
