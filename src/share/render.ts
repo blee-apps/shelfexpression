@@ -2,6 +2,8 @@ import { BOOK_ASPECT } from '../decor';
 // Draws the share images: Instagram-ready pictures of books you pick.
 // Everything is drawn on a canvas at full size (1080 px wide).
 
+import type { Wear } from '../wear';
+
 export type ShareSize = 'story' | 'post' | 'square';
 export type ShareLayout = 'grid' | 'shelf' | 'feature';
 export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom';
@@ -11,6 +13,7 @@ export interface ShareOptions {
   layout: ShareLayout;
   bg: ShareBg;
   custom: string;             // the color for bg 'custom'
+  wear: Wear;                 // worn covers (drawn into the images beforehand)
   align: 'left' | 'center';   // feature layout
   synopsis: boolean;          // feature layout
   titles: boolean;            // grid layout
@@ -37,7 +40,7 @@ export const SIZES: Record<ShareSize, { w: number; h: number; label: string; hin
 };
 
 export const DEFAULT_OPTIONS: ShareOptions = {
-  size: 'story', layout: 'grid', bg: 'paper', custom: '#3d4a5c', align: 'center',
+  size: 'story', layout: 'grid', bg: 'paper', custom: '#3d4a5c', wear: 'off', align: 'center',
   synopsis: false, titles: false, heading: '', footerOn: true, footer: '',
 };
 

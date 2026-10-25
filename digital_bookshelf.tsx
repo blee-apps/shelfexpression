@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, isDecor } from './src/books';
+import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, COLOR_MODE, WEAR, isDecor } from './src/books';
+import { wearOverlay, wearLevel } from './src/wear';
 import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
 
@@ -179,7 +180,7 @@ const DynamicCover = ({ book, eager = false }: { book: Book; eager?: boolean }) 
   const aspectRatio = useBookAspectRatio(book);
 
   return (
-    <div className="relative w-full" style={{ aspectRatio, backgroundColor: failed ? getColorForString(book.title) : 'transparent' }}>
+    <div className="relative w-full" style={{ aspectRatio, isolation: 'isolate', backgroundColor: failed ? getColorForString(book.title) : 'transparent' }}>
       {/* Holding shape while the cover loads: a dotted outline of the book */}
       {!loaded && !failed && (
         <div aria-hidden className="absolute inset-0 rounded-xs border-2 border-dotted border-black/30 dark:border-white/30" />
@@ -196,12 +197,33 @@ const DynamicCover = ({ book, eager = false }: { book: Book; eager?: boolean }) 
           className={`absolute inset-0 w-full h-full transition-opacity duration-300 ease-out ${loaded ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
+      {url && loaded && <WearLayers book={book} />}
       {failed && (
         <div className="absolute inset-0 flex flex-col justify-between p-5 border border-white/10 shadow-[inset_0_0_40px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
           <span className="font-serif text-white text-2xl leading-tight drop-shadow-md z-10">{book.title}</span>
         </div>
       )}
+    </div>
+  );
+};
+
+// Worn look over a cover (see src/wear.ts): a slight fade, then the book's
+// own wear overlay. The share images draw the same layers the same way.
+const WEAR_LV = wearLevel(WEAR);
+const WearLayers = ({ book }: { book: Book }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!WEAR_LV) return;
+    let live = true;
+    wearOverlay(book.title, book.author).then(u => { if (live) setUrl(u); });
+    return () => { live = false; };
+  }, [book.title, book.author]);
+  if (!WEAR_LV) return null;
+  return (
+    <div aria-hidden className="absolute inset-0" style={{ pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', inset: 0, background: '#808080', mixBlendMode: 'saturation', opacity: WEAR_LV.fade }} />
+      {url && <img src={url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: WEAR_LV.strength }} />}
     </div>
   );
 };
