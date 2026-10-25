@@ -4,12 +4,13 @@ import { BOOK_ASPECT } from '../decor';
 
 export type ShareSize = 'story' | 'post' | 'square';
 export type ShareLayout = 'grid' | 'shelf' | 'feature';
-export type ShareBg = 'paper' | 'white' | 'dark' | 'cover';
+export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom';
 
 export interface ShareOptions {
   size: ShareSize;
   layout: ShareLayout;
   bg: ShareBg;
+  custom: string;             // the color for bg 'custom'
   align: 'left' | 'center';   // feature layout
   synopsis: boolean;          // feature layout
   titles: boolean;            // grid layout
@@ -36,7 +37,7 @@ export const SIZES: Record<ShareSize, { w: number; h: number; label: string; hin
 };
 
 export const DEFAULT_OPTIONS: ShareOptions = {
-  size: 'story', layout: 'grid', bg: 'paper', align: 'center',
+  size: 'story', layout: 'grid', bg: 'paper', custom: '#3d4a5c', align: 'center',
   synopsis: false, titles: false, heading: '', footerOn: true, footer: '',
 };
 
@@ -79,8 +80,18 @@ export function coverColor(img: HTMLImageElement | null): [number, number, numbe
   } catch { return null; }
 }
 
+const hexToRgb = (h: string): [number, number, number] | null => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
 function palette(o: ShareOptions, tint: [number, number, number] | null): Palette {
-  if (o.bg === 'cover' && tint) {
+  // A picked color is drawn like a cover color: the text turns light or
+  // dark to suit it.
+  if (o.bg === 'custom') tint = hexToRgb(o.custom);
+  if ((o.bg === 'cover' || o.bg === 'custom') && tint) {
     const light = luminance(...tint) > 0.55;
     return {
       bg: hex(...tint),
