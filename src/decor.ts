@@ -23,9 +23,9 @@ const CAMERA_ASPECT = 1275 / 800;
 
 export const DECOR_CATALOGUE: DecorDef[] = [
   { id: 'cactus', label: 'Cactus', src: '/decor/cactus.webp', height: 0.75, aspect: 356 / 800, base: [0.24, 0.76] },
-  { id: 'snowglobe', label: 'Snow globe', src: '/decor/snowglobe.webp', height: 0.7, aspect: 630 / 800, base: [0.05, 0.95] },
+  { id: 'snowglobe', label: 'Snow globe', src: '/decor/snowglobe.webp', height: 0.55, aspect: 468 / 637, base: [0.01, 0.99] },
   { id: 'figurine', label: 'Figure', src: '/decor/figurine.webp', height: 0.6, aspect: 315 / 800, base: [0.15, 0.85] },
-  { id: 'speaker', label: 'Speaker', src: '/decor/speaker.webp', height: 0.48, aspect: 902 / 800, base: [0.22, 0.78] },
+  { id: 'speaker', label: 'Speaker', src: '/decor/speaker.webp', height: 0.48, aspect: 903 / 800, base: [0.25, 0.75] },
   // No wider than 2/3 of a paperback (measured): width = 2/3 × the book's width.
   { id: 'camera', label: 'Film camera', src: '/decor/camera.webp', height: (2 / 3) * BOOK_ASPECT / CAMERA_ASPECT, aspect: CAMERA_ASPECT, base: [0.03, 0.97] },
   { id: 'trophy', label: 'Trophy', src: '/decor/trophy.webp', height: 0.62, aspect: 510 / 654, base: [0.24, 0.76] },
