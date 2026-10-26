@@ -1,11 +1,12 @@
 // Goodreads import: read the CSV that Goodreads' "Export Library" gives you,
 // tick the books you want, and they fill the shelf's free slots. Goodreads
-// doesn't export covers or blurbs: covers are found automatically (by ISBN,
-// like any book), and blurbs are looked up for the books you pick.
+// doesn't export covers or blurbs, so both are looked up for the books you
+// pick, using the same search as Add book.
 import { useMemo, useRef, useState } from 'react';
 import { X, Upload, Check, Search } from 'lucide-react';
 import { Book } from './books';
 import { searchBooks } from './bookSearch';
+import { addPendingCover, fetchCover } from './publish';
 
 export type GoodreadsRow = {
   grId: string; title: string; author: string; isbn: string; year: number;
@@ -151,6 +152,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
     cancelRef.current = ac;
     const synopses: string[] = new Array(chosen.length).fill('');
     const years: number[] = chosen.map(b => b.year);
+    const covers: string[] = new Array(chosen.length).fill('');
     let next = 0, done = 0;
     setProgress({ done: 0, total: chosen.length });
     const worker = async () => {
@@ -159,10 +161,24 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
         const b = chosen[i];
         try {
           const { results } = await searchBooks(b.title, b.author, gbKey, ac.signal);
-          const hit = results.find(r => b.isbn && r.isbns.includes(b.isbn)) || results[0];
+          // Same ISBN first; otherwise the title and author's surname have to match, so
+          // a knockoff "Summary of…" never sneaks in.
+          const short = norm(b.title.split(':')[0]);
+          const surname = norm(b.author.split(/\s+/).pop() || '');
+          const hit = results.find(r => b.isbn && r.isbns.includes(b.isbn))
+            || results.find(r => surname && norm(r.author).includes(surname)
+              && norm(r.title).startsWith(short) && !/^summary\b/i.test(r.title));
           if (hit) {
             synopses[i] = hit.synopses[0] || '';
             if (!years[i] && hit.year) years[i] = hit.year;
+            const url = hit.covers[0]?.url;
+            if (url) {
+              // Like Add book: on the live site the cover is downloaded now and
+              // uploaded when you publish. Locally it just points at the URL.
+              if (!import.meta.env.DEV && /^https:\/\//.test(url)) {
+                try { covers[i] = addPendingCover(b.isbn || `gr-${b.grId || i}`, await fetchCover(url)); } catch {}
+              } else covers[i] = url;
+            }
           }
         } catch {}
         done++;
@@ -181,7 +197,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
       synopsis: synopses[i],
       gr: b.grId,
       mult: 1.0,
-      coverUrl: '',
+      coverUrl: covers[i],
     })));
   };
 
@@ -230,7 +246,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
             {freeSlots <= 0 && <p style={{ margin: 0, color: '#b42318' }}>The shelf is full ({slotCount} slots). Remove something first.</p>}
             {error && <p style={{ margin: 0, color: '#b42318' }}>{error}</p>}
             <p style={{ margin: 0, fontSize: '0.8rem', color: '#888' }}>
-              The file stays on this device. Covers are found automatically, and blurbs are looked up for the books you pick.
+              The file stays on this device. Covers and blurbs are looked up for the books you pick.
             </p>
             <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
@@ -286,11 +302,11 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
           <div className="sheet-footer" style={{ padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ flex: 1, fontSize: '0.8rem', color: full ? '#1a1a1a' : '#888', lineHeight: 1.35 }}>
               {progress
-                ? `Finding blurbs\u2026 ${progress.done} of ${progress.total}`
+                ? `Finding covers and blurbs\u2026 ${progress.done} of ${progress.total}`
                 : `${picked.length} of ${freeSlots} free ${freeSlots === 1 ? 'slot' : 'slots'}`}
             </span>
             {progress ? (
-              <button onClick={skipBlurbs} style={secondary}>Skip blurbs</button>
+              <button onClick={skipBlurbs} style={secondary}>Skip the rest</button>
             ) : (
               <>
                 {picked.length > 0 && <button onClick={() => setPicked([])} style={secondary}>Clear</button>}
