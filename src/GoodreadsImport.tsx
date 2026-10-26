@@ -96,6 +96,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<AbortController | null>(null);
+  const closedRef = useRef(false);
 
   const keyOf = (b: GoodreadsRow) => b.grId || `${norm(b.title)}|${norm(b.author)}`;
   const onShelf = useMemo(() => {
@@ -146,6 +147,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
 
   // Look up a blurb for each picked book (a few at a time), then add them.
   const add = async () => {
+    if (progress) return;
     const chosen = picked.map(k => byKey.get(k)).filter((b): b is GoodreadsRow => !!b);
     if (!chosen.length) return;
     const ac = new AbortController();
@@ -187,6 +189,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
     };
     await Promise.all([worker(), worker(), worker()]);
     cancelRef.current = null;
+    if (closedRef.current) return; // closed mid-lookup: add nothing
     const stamp = Date.now().toString(36);
     onAdd(chosen.map((b, i) => ({
       id: `gr-${stamp}-${i + 1}`,
@@ -223,7 +226,7 @@ export default function GoodreadsImport({ existing, freeSlots, slotCount, gbKey,
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', paddingTop: 'max(12px, env(safe-area-inset-top))', borderBottom: '1px solid #eee' }}>
         <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Import from Goodreads</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => { skipBlurbs(); onClose(); }} aria-label="Close"
+        <button onClick={() => { closedRef.current = true; skipBlurbs(); onClose(); }} aria-label="Close"
           style={{ ...secondary, padding: 8, minHeight: 34 }}><X size={16} /></button>
       </div>
 
