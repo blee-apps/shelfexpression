@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle } from 'lucide-react';
+import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle, ChevronDown, BookDown } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
 import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
@@ -9,6 +9,7 @@ import ShareStudio, { clearShareExtras } from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
 import UpdatePanel from './UpdatePanel';
+import GoodreadsImport from './GoodreadsImport';
 import { Release, CURRENT_VERSION, UPSTREAM, checkForUpdates } from './updater';
 import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
 import { getToken } from './github';
@@ -26,7 +27,15 @@ interface Props {
   guest?: boolean;
 }
 
-const SLOT_COUNT = 48;
+export const SLOT_COUNT = 48;
+
+// Imported books get a "Check" badge in the editor until you open them, so you
+// remember to look over their blurbs. Kept on this device only; a badge you
+// never act on fades out after a few editor sessions.
+const REVIEW_KEY = 'bookshelf.toReview';
+const REVIEW_SESSIONS = 3;
+const readReview = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}'); } catch { return {}; } };
+const writeReview = (r: Record<string, number>) => { try { Object.keys(r).length ? localStorage.setItem(REVIEW_KEY, JSON.stringify(r)) : localStorage.removeItem(REVIEW_KEY); } catch {} };
 // editingIndex value for a brand-new book, which goes in at the top.
 const NEW_BOOK = -2;
 
@@ -156,6 +165,19 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedForShare, setSelectedForShare] = useState<Set<number>>(new Set());
   const [studioOpen, setStudioOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [addMenu, setAddMenu] = useState(false);
+  // Count this editor session against each badge, once.
+  const [toReview, setToReview] = useState<Record<string, number>>(() => {
+    const r = readReview();
+    for (const k of Object.keys(r)) if (--r[k] <= 0) delete r[k];
+    writeReview(r);
+    return r;
+  });
+  const clearReview = (id?: string) => {
+    if (!id || !(id in toReview)) return;
+    setToReview(prev => { const n = { ...prev }; delete n[id]; writeReview(n); return n; });
+  };
   const [staticOpen, setStaticOpen] = useState(false);
   // New versions of Shelf Expression, checked at most once an hour.
   const [updates, setUpdates] = useState<Release[] | null>(null);
@@ -529,6 +551,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const openEdit = (index: number) => {
     setEditingIndex(index);
     const book = slots[index];
+    clearReview(book?.id);
     setEditTitle(book?.title || '');
     setEditAuthor(book?.author || '');
     setEditYear(String(book?.year || ''));
@@ -1228,11 +1251,26 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         {/* ADD BOOK */}
         {!shareMode && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <button onClick={() => openEdit(NEW_BOOK)} disabled={filledCount >= SLOT_COUNT}
-              title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} books). Remove one first.` : 'Add a book at the top'}
-              style={{ ...btnStyle({ small: false }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
-              <Plus size={15} /> Add book
-            </button>
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <button onClick={() => openEdit(NEW_BOOK)} disabled={filledCount >= SLOT_COUNT}
+                title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} books). Remove one first.` : 'Add a book at the top'}
+                style={{ ...btnStyle({ small: false }), borderTopRightRadius: 0, borderBottomRightRadius: 0, ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
+                <Plus size={15} /> Add book
+              </button>
+              <button onClick={() => setAddMenu(v => !v)} disabled={filledCount >= SLOT_COUNT} aria-label="More ways to add books" aria-expanded={addMenu}
+                style={{ ...btnStyle({ small: false }), padding: '7px 8px', borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: '1px solid rgba(255,255,255,0.25)', ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
+                <ChevronDown size={15} />
+              </button>
+              {addMenu && <>
+                <div onClick={() => setAddMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+                <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 21, background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 4, minWidth: 210 }}>
+                  <button role="menuitem" onClick={() => { setAddMenu(false); setImportOpen(true); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 10px', border: 'none', borderRadius: 5, background: 'transparent', fontSize: '0.85rem', cursor: 'pointer', textAlign: 'left', color: '#1a1a1a' }}>
+                    <BookDown size={15} /> Import from Goodreads…
+                  </button>
+                </div>
+              </>}
+            </div>
             <button onClick={() => setDecorPickFor(NEW_BOOK)} disabled={filledCount >= SLOT_COUNT} className="admin-add-decor"
               title={filledCount >= SLOT_COUNT ? `The shelf is full (${SLOT_COUNT} slots). Remove one first.` : 'Add a cactus, a camera or another little thing to the shelf'}
               style={{ ...btnStyle({ secondary: true }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
@@ -1331,6 +1369,12 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             >
               {book ? (
                 <>
+                  {!shareMode && book.id in toReview && (
+                    <div title="Imported: check the blurb" style={{
+                      position: 'absolute', top: 4, right: 4, zIndex: 2, fontSize: '0.62rem', fontWeight: 600,
+                      color: '#fff', background: '#d97706', padding: '3px 7px', borderRadius: 999, pointerEvents: 'none',
+                    }}>Check</div>
+                  )}
                   {shareMode ? (
                     <div aria-label={selectedForShare.has(i) ? 'Picked' : 'Not picked'} style={{
                       position: 'absolute', top: 6, left: 6, zIndex: 2, width: 26, height: 26, borderRadius: 13,
@@ -1463,6 +1507,29 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         .admin-slot.drag-over { outline: 2px solid #1a1a1a; outline-offset: 2px; }
         .admin-result:hover, .admin-result:focus-visible { border-color: #ccc !important; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
       `}</style>
+
+      {/* GOODREADS IMPORT */}
+      {importOpen && (
+        <GoodreadsImport
+          existing={slots.filter((b): b is Book => b !== null)}
+          freeSlots={SLOT_COUNT - filledCount}
+          slotCount={SLOT_COUNT}
+          gbKey={gbKey}
+          onClose={() => setImportOpen(false)}
+          onAdd={books => {
+            // Imported books fill the free slots after the ones already there.
+            setSlots(prev => compact([...prev.filter((b): b is Book => b !== null), ...books]));
+            setToReview(prev => {
+              const n = { ...prev };
+              for (const b of books) n[b.id] = REVIEW_SESSIONS;
+              writeReview(n);
+              return n;
+            });
+            setImportOpen(false);
+            showToast(`Added ${books.length} ${books.length === 1 ? 'book' : 'books'} from Goodreads. Tap each one marked Check to look over its blurb.`);
+          }}
+        />
+      )}
 
       {/* SHARE STUDIO */}
       {studioOpen && (
