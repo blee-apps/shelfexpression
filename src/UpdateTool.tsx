@@ -13,7 +13,7 @@ import { Release, CURRENT_VERSION, UPSTREAM, checkForUpdates } from './updater';
 import { SITE, SHELF_CONTENT as shelfContent, COVER_MANIFEST as coverManifest, IS_STATIC_SITE } from './shelfData';
 import { getToken } from './github';
 import { pendingCovers, coverSrc, addPendingCover, fetchCover, resizeCover, describeChanges, publish, PublishError, PublishResult,
-  markCoversPublished, canonicalShelf, fetchLatestShelf, fetchPublishedCover, deployStatus, Deploy, Draft, loadDraft, saveDraft, clearDraft, restoreDraftCovers } from './publish';
+  markCoversPublished, canonicalShelf, fetchLatestShelf, fetchPublishedCover, deployStatus, testPreviewStatus, TestPreview, Deploy, Draft, loadDraft, saveDraft, clearDraft, restoreDraftCovers } from './publish';
 import { searchBooks, measureImage, BookResult, CoverCandidate } from './bookSearch';
 
 interface Props {
@@ -121,6 +121,17 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [publishing, setPublishing] = useState(false);
   const [publishStatus, setPublishStatus] = useState<{ text: string; error?: boolean; result?: PublishResult } | null>(null);
   const [deploy, setDeploy] = useState<Deploy | null>(null);
+  // The current test preview (maybe from an earlier session), shown when the
+  // target is Test preview so you can compare without publishing again.
+  const [testPreview, setTestPreview] = useState<TestPreview | null>(null);
+  useEffect(() => {
+    if (import.meta.env.DEV || guest || !publishToTest) return;
+    const token = getToken();
+    if (!token) return;
+    let gone = false;
+    testPreviewStatus(token).then(t => { if (!gone) setTestPreview(t); }).catch(() => {});
+    return () => { gone = true; };
+  }, [publishToTest, guest, deploy?.state]);
   const [startupDone, setStartupDone] = useState(import.meta.env.DEV);
   const [draftOffer, setDraftOffer] = useState<Draft | null>(null);
 
@@ -1104,6 +1115,11 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             {publishStatus
               ? <>{publishStatus.text}{publishStatus.result && <> <a href={publishStatus.result.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>View commit</a></>}</>
               : hasChanges ? 'Unpublished changes, saved on this device.' : 'No changes to publish.'}
+            {publishToTest && !publishStatus?.result && testPreview?.state === 'ready' && testPreview.url && (
+              <span style={{ display: 'block' }}>
+                Current test preview{testPreview.date && <>, published {new Date(testPreview.date).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</>}. <a href={testPreview.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Open it</a>
+              </span>
+            )}
             {deploy && publishStatus?.result && (
               <span style={{ display: 'block', color: deploy.state === 'failed' ? '#b42318' : deploy.state === 'ready' ? '#1e7a3c' : '#888' }}>
                 {(deploy.state === 'waiting' || (deploy.state === 'no-access' && publishStatus.result.branch === SITE.github.branch)) && <><span className="admin-spinner" style={{ width: 9, height: 9, marginRight: 5, verticalAlign: -1 }} />Waiting for the build…</>}
