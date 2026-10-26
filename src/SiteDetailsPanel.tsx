@@ -108,7 +108,7 @@ export default function SiteDetailsPanel({ target, toTest, bookCount, onClose }:
           </>}
         </div>
 
-        <div style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div className="sheet-footer" style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.75rem', color: status?.error ? '#b42318' : '#888', flex: '1 1 180px', lineHeight: 1.4 }}>
             {status ? status.text : target === 'device' ? 'Changes are kept as you type.' : ''}
           </span>

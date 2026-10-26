@@ -1836,7 +1836,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               )}
             </div>
 
-            <div style={{ padding: '10px 18px', borderTop: '1px solid #eee', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="sheet-footer" style={{ padding: '10px 18px', borderTop: '1px solid #eee', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               {editingIndex !== NEW_BOOK && (
                 <button onClick={() => { if (confirmRemove(slots[editingIndex]?.title || 'this book')) { clearSlot(); setEditingIndex(-1); } }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
               )}

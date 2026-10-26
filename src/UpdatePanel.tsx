@@ -161,7 +161,7 @@ export default function UpdatePanel({ releases, guest, hasUnpublished, onClose }
         </div>
 
         {canInstall && plan && files > 0 && stage.kind !== 'live' && (
-          <div style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="sheet-footer" style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {stage.kind === 'working' && <span style={{ ...small, flex: '1 1 160px' }}>{stage.text}</span>}
             {stage.kind !== 'preview' && (
               <button onClick={preview} disabled={busy} style={{ ...btn({ secondary: true }), ...(busy ? { opacity: 0.5 } : {}) }}>Preview first</button>
@@ -172,7 +172,7 @@ export default function UpdatePanel({ releases, guest, hasUnpublished, onClose }
           </div>
         )}
         {stage.kind === 'live' && stage.ready && (
-          <div style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="sheet-footer" style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={() => window.location.reload()} style={btn()}>Reload</button>
           </div>
         )}

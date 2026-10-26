@@ -14,3 +14,12 @@
     border-color: var(--color-gray-200, currentColor);
   }
 }
+
+/* Phones: keep a sheet's bottom buttons clear of the screen's rounded
+   corners and the home indicator. */
+@media (max-width: 600px) {
+  .sheet-footer {
+    padding-top: 14px !important;
+    padding-bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px)) !important;
+  }
+}
