@@ -391,6 +391,20 @@ export async function deployStatus(token: string, sha: string, live = false): Pr
   return d;
 }
 
+// The test preview as it stands now: the latest build of the test branch,
+// which may be from an earlier session. Null when there's no test branch yet.
+export type TestPreview = Deploy & { date?: string };
+export async function testPreviewStatus(token: string): Promise<TestPreview | null> {
+  const { repo, testBranch } = SITE.github;
+  if (!repo || !testBranch) return null;
+  let r: Response;
+  try { r = await fetch(`https://api.github.com/repos/${repo}/commits/${encodeURIComponent(testBranch)}`, { headers: githubHeaders(token) }); } catch { return null; }
+  if (!r.ok) return null;
+  const c = await r.json();
+  const d = await githubDeploy(token, c.sha);
+  return { ...d, date: c.commit?.committer?.date };
+}
+
 async function githubDeploy(token: string, sha: string): Promise<Deploy> {
   const base = `https://api.github.com/repos/${SITE.github.repo}`;
   let r: Response;

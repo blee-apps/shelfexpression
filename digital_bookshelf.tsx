@@ -393,8 +393,69 @@ const useShelfRows = (gridRef: React.RefObject<HTMLDivElement | null>, animState
   return state;
 };
 
+// Below the page: when you scroll past the end on a phone or trackpad, the
+// page bounces and shows what's behind it. Rather than plain page color,
+// the wall and tracks carry on down there, as if the shelf went further.
+// The scrolling box's own background stays put while the page bounces, so
+// once you reach the bottom it's painted with a strip of wall and tracks
+// lined up with the real ones (hidden behind the real wall until the bounce).
+const TAIL_H = '35%';
+const useOverscrollTail = (wallRef: React.RefObject<HTMLDivElement | null>, rowsKey: string) => {
+  useEffect(() => {
+    const wall = wallRef.current;
+    if (!wall) return;
+    let scroller: HTMLElement | null = wall.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    if (!scroller) return;
+    const box = scroller;
+    let on = false;
+    let raf = 0;
+    const paint = () => {
+      raf = 0;
+      const atBottom = box.scrollHeight - box.clientHeight - box.scrollTop <= 2;
+      if (!atBottom) {
+        if (on) { box.style.backgroundImage = ''; on = false; }
+        return;
+      }
+      const dark = !!box.closest('.dark') || box.classList.contains('dark');
+      const ref = box.getBoundingClientRect();
+      const w = wall.getBoundingClientRect();
+      const tube = dark
+        ? 'linear-gradient(to right, #3e3f42 0, #6d6f73 1px, #7a7c80 50%, #66686c calc(100% - 1px), #3e3f42 100%)'
+        : 'linear-gradient(to right, #c3c5c8 0, #dcdee0 1px, #e6e7e9 50%, #d6d8db calc(100% - 1px), #b9bbbe 100%)';
+      const slots = `repeating-linear-gradient(to bottom, ${dark ? 'rgba(0,0,0,0.45)' : 'rgba(40,42,46,0.32)'} 0 7px, transparent 7px 16px)`;
+      const wallColor = dark ? '#1b1b1c' : '#F4F2EE';
+      const layers: string[] = [];
+      const pos: string[] = [];
+      const size: string[] = [];
+      const xs = Array.from(wall.querySelectorAll<HTMLElement>('.shelf-track'))
+        .map(t => t.getBoundingClientRect()).filter(r => r.width > 0).map(r => r.left - ref.left);
+      xs.forEach(x => { layers.push(slots); pos.push(`${x + 4}px 100%`); size.push(`2px ${TAIL_H}`); });
+      xs.forEach(x => { layers.push(tube); pos.push(`${x}px 100%`); size.push(`10px ${TAIL_H}`); });
+      layers.push(`linear-gradient(${wallColor}, ${wallColor})`); pos.push(`${w.left - ref.left}px 100%`); size.push(`${w.width}px ${TAIL_H}`);
+      box.style.backgroundImage = layers.join(', ');
+      box.style.backgroundPosition = pos.join(', ');
+      box.style.backgroundSize = size.join(', ');
+      box.style.backgroundRepeat = 'no-repeat';
+      on = true;
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(paint); };
+    schedule();
+    box.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      box.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      if (raf) cancelAnimationFrame(raf);
+      box.style.backgroundImage = ''; box.style.backgroundPosition = ''; box.style.backgroundSize = ''; box.style.backgroundRepeat = '';
+    };
+  }, [wallRef, rowsKey]);
+};
+
 const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLDivElement | null>; animState: string }) => {
   const { rows, gridOffsetTop } = useShelfRows(gridRef, animState);
+  const wallRef = useRef<HTMLDivElement>(null);
+  useOverscrollTail(wallRef, `${rows.length}:${rows[rows.length - 1]?.bottom ?? 0}:${COLOR_MODE}`);
 
   if (rows.length === 0) return null;
 
@@ -405,6 +466,7 @@ const ShelfStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
 
   return (
     <div
+      ref={wallRef}
       className="shelf-wall"
       style={{ top: gridOffsetTop - PAD, left: -PAD, right: -PAD }}
       aria-hidden="true"
