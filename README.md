@@ -37,9 +37,10 @@ Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and
 
 1. Tap **Add book**, then type the title and author. The editor searches **Apple Books, Google Books and OpenLibrary** at once.
 2. Pick the right book. The title, author, year, ISBN, synopsis and **Goodreads page** fill in.
+   - **Have a Goodreads library?** Tap the arrow next to **Add book** and choose **Import from Goodreads**. On Goodreads, open [Import and export](https://www.goodreads.com/review/import), tap **Export Library** and download the .csv file. Choose it in the editor, pick books from any of your shelves (newest read first), and they're added with their covers and synopses. Imported books show a **New** badge so you can check them over. The file stays on your device.
 3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**.
-5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker or film camera on the shelf. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations show on the **Vitsoe** and **Billy** shelves, not the **Minimal** one.
+5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker, film camera, trophy or reed diffuser on the shelf, or a **Photo frame** with any photo you choose. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations show on the **Vitsoe** and **Billy** shelves, not the **Minimal** one.
 6. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
 
 ### 5. Publish
