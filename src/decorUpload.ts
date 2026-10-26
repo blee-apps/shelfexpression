@@ -1,3 +1,4 @@
+import { fillPhoto, PhotoPlace } from './photoFill';
 // Your own decoration: a transparent PNG (or WebP) picked in the editor.
 // It's tidied up in the browser before it waits with the new covers:
 // the see-through margins are cut off (so the bottom edge is where it
@@ -88,4 +89,48 @@ export async function prepareDecorImage(file: Blob): Promise<PreparedDecor> {
   if (!blob) throw new Error('Couldn\u2019t prepare the image');
   const ext = blob.type === 'image/webp' ? 'webp' : 'png';
   return { blob, ext, preview: URL.createObjectURL(blob), aspect: round(out.width / out.height, 4), base, transparent };
+}
+
+// The photo frame: your photo (any JPEG, PNG or WebP; iPhone turns HEIC
+// into a JPEG when it's picked) placed behind the frame's mat, with the same
+// pan, zoom and blur as the Share Studio's photo background. Only the framed
+// result is saved, so a blurred photo is never published sharp.
+
+export const loadPhoto = loadImage;
+
+export const loadFrame = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error('Couldn\u2019t load the frame'));
+  img.src = src;
+});
+
+export type FramePlace = PhotoPlace & { blur: number };
+
+/** The framed photo drawn at size x size. */
+export function drawFramed(photo: HTMLImageElement, frame: HTMLImageElement, window: readonly [number, number, number, number], place: FramePlace, size: number): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = out.height = size;
+  const ctx = out.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  // A hair bigger than the opening, so no gap shows at the mat's edge.
+  const bleed = 0.006;
+  const [l, t, r, b] = window;
+  const wx = Math.floor((l - bleed) * size), wy = Math.floor((t - bleed) * size);
+  const ww = Math.ceil((r - l + bleed * 2) * size), wh = Math.ceil((b - t + bleed * 2) * size);
+  // Blur scales with the opening: at 100 it's strong enough that faces and
+  // text can't be made out, leaving just the colors and light.
+  ctx.drawImage(fillPhoto(photo, ww, wh, place, (place.blur / 100) * ww * 0.06), wx, wy);
+  ctx.drawImage(frame, 0, 0, size, size);
+  return out;
+}
+
+/** The framed photo, ready to wait with the new covers. */
+export async function framedDecor(canvas: HTMLCanvasElement): Promise<PreparedDecor> {
+  // WebP keeps it small; browsers that can't write it get a PNG.
+  let blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.88));
+  if (!blob || blob.type !== 'image/webp') blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Couldn\u2019t prepare the photo');
+  const ext = blob.type === 'image/webp' ? 'webp' : 'png';
+  return { blob, ext, preview: URL.createObjectURL(blob), aspect: 1, base: [0, 1], transparent: true };
 }

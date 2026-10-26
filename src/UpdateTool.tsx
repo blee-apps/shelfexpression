@@ -3,8 +3,9 @@ import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRi
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
 import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
-import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef } from './decor';
-import { prepareDecorImage } from './decorUpload';
+import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef, PHOTO_FRAME } from './decor';
+import { prepareDecorImage, loadPhoto, loadFrame, drawFramed, framedDecor, FramePlace } from './decorUpload';
+import { panFill } from './photoFill';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
@@ -44,7 +45,13 @@ type CustomDraft = {
   at: number; label: string; height: number; aspect: number; base: [number, number];
   preview: string; transparent: boolean;
   src?: string; blob?: Blob; ext?: 'png' | 'webp';
+  frame?: boolean;
+  // A photo frame with a newly picked photo: the photo and how it sits.
+  // (Once saved only the framed image is kept, so reopening one shows that.)
+  photo?: HTMLImageElement; place?: FramePlace;
 };
+
+const FRAME_START: FramePlace = { x: 0.5, y: 0.5, zoom: 100, blur: 0 };
 
 const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
@@ -203,6 +210,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const [customDraft, setCustomDraft] = useState<CustomDraft | null>(null);
   const [decorBusy, setDecorBusy] = useState(false);
   const decorFileRef = useRef<HTMLInputElement>(null);
+  const frameFileRef = useRef<HTMLInputElement>(null);
   // Footer line on share images. Starts as the site address, then remembers
   // what you type (on this device right away, and in books.json on publish).
   const [shareFooter, setShareFooter] = useState<string | undefined>(() => {
@@ -426,19 +434,52 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     setDecorBusy(false);
   };
 
+  // The photo frame: puts the picked photo in the frame and opens the sheet,
+  // or swaps the photo in the sheet that's already open.
+  const pickFramePhoto = async (file: File) => {
+    setDecorBusy(true);
+    try {
+      const photo = await loadPhoto(file);
+      if (!photo.naturalWidth || !photo.naturalHeight) throw new Error('That image is empty');
+      const at = customDraft ? customDraft.at : decorPickFor;
+      // A new photo starts centered; blur carries over.
+      setCustomDraft(prev => prev
+        ? { ...prev, src: undefined, blob: undefined, photo, place: { ...FRAME_START, blur: prev.place?.blur ?? 0 }, aspect: 1, base: [0, 1], transparent: true, frame: true }
+        : { at, label: PHOTO_FRAME.label, height: PHOTO_FRAME.height, preview: '', photo, place: FRAME_START, aspect: 1, base: [0, 1], transparent: true, frame: true });
+      setDecorPickFor(-1);
+    } catch (err: any) {
+      showToast(`Couldn\u2019t use that photo: ${err.message}.`);
+    }
+    setDecorBusy(false);
+  };
+
   // Tapping your own decoration in the list: change its size, label or image.
   const openCustomDecor = (i: number) => {
     const c = customDecor(slots[i]);
     if (!c) { setDecorPickFor(i); return; }
-    setCustomDraft({ at: i, label: c.label, height: c.height, src: c.src, preview: coverSrc(c.src), aspect: c.aspect, base: c.base, transparent: true });
+    setCustomDraft({ at: i, label: c.label, height: c.height, src: c.src, preview: coverSrc(c.src), aspect: c.aspect, base: c.base, transparent: true, frame: !!c.frame });
   };
 
-  const saveCustomDecor = () => {
-    const d = customDraft;
+  const saveCustomDecor = async () => {
+    let d = customDraft;
     if (!d) return;
     if (d.at === NEW_BOOK && filledCount >= SLOT_COUNT) { showToast(`The shelf is full (${SLOT_COUNT} slots). Remove something first.`); return; }
-    const src = d.blob ? addPendingCover('decor', d.blob, d.ext) : d.src;
-    const custom = customDecor({ decor: CUSTOM_DECOR, src, label: d.label, height: d.height, aspect: d.aspect, base: d.base });
+    // A photo frame: the photo is framed now, at full size, as it's set.
+    if (d.photo && d.place) {
+      setDecorBusy(true);
+      try {
+        const frame = await loadFrame(PHOTO_FRAME.src);
+        const img = await framedDecor(drawFramed(d.photo, frame, PHOTO_FRAME.window, d.place, 800));
+        d = { ...d, blob: img.blob, ext: img.ext };
+      } catch (err: any) {
+        setDecorBusy(false);
+        showToast(`Couldn\u2019t frame that photo: ${err.message}.`);
+        return;
+      }
+      setDecorBusy(false);
+    }
+    const src = d.blob ? addPendingCover(d.frame ? 'frame' : 'decor', d.blob, d.ext) : d.src;
+    const custom = customDecor({ decor: CUSTOM_DECOR, src, label: d.label, height: d.height, aspect: d.aspect, base: d.base, frame: d.frame || undefined });
     if (!custom) { showToast('Couldn\u2019t use that image.'); return; }
     if (d.at === NEW_BOOK) {
       setSlots(prev => compact([decorBook(`decor-${Date.now().toString(36)}`, CUSTOM_DECOR, custom), ...prev]));
@@ -1394,7 +1435,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                     <>
                       <DecorThumb def={decorDefOf(book)} />
                       <div style={{ fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.3, overflowWrap: 'break-word' }}>{decorDefOf(book)?.label ?? 'Unknown decoration'}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#888' }}>{book.decor === CUSTOM_DECOR ? 'Your decoration' : 'Decoration'}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#888' }}>{book.decor === CUSTOM_DECOR ? (customDecor(book)?.frame ? 'Your photo' : 'Your decoration') : 'Decoration'}</div>
                       {!shareMode && (
                         <div style={{ display: 'flex', gap: 5, marginTop: 'auto', paddingTop: 4 }}>
                           <button onClick={(e) => { e.stopPropagation(); const label = decorDefOf(book)?.label ?? 'decoration'; if (confirmRemove(book.decor === CUSTOM_DECOR ? label : label.toLowerCase())) removeBook(i); }} style={{ ...btnStyle({ secondary: true, small: true }), color: '#c0392b' }}>Remove</button>
@@ -1595,6 +1636,20 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
                     </button>
                   );
                 })}
+                {/* The photo frame: your own photo in a black frame */}
+                <button onClick={() => frameFileRef.current?.click()} disabled={decorBusy} className="admin-result admin-decor-frame"
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 8, minHeight: 0,
+                    background: '#fff', border: '1px solid #eee', borderRadius: 8, cursor: decorBusy ? 'progress' : 'pointer', font: 'inherit', color: '#1a1a1a' }}>
+                  <div style={{ width: '100%', aspectRatio: 2 / 3, borderRadius: 4, background: '#fafaf8', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', position: 'relative', paddingBottom: '8%' }}>
+                    <div style={{ width: '78%', aspectRatio: 1, position: 'relative' }}>
+                      <div style={{ position: 'absolute', inset: '17%', background: '#e6e3dc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+                        {decorBusy ? <span className="admin-spinner" /> : <ImagePlus size={16} strokeWidth={1.6} />}
+                      </div>
+                      <img src={PHOTO_FRAME.src} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, textAlign: 'center' }}>Photo frame</span>
+                </button>
                 {/* Your own: a transparent PNG or WebP */}
                 <button onClick={() => decorFileRef.current?.click()} disabled={decorBusy} className="admin-result admin-decor-upload"
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 8, minHeight: 0,
@@ -1613,12 +1668,14 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
 
       <input ref={decorFileRef} type="file" accept="image/png,image/webp" style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickDecorFile(f); }} />
+      <input ref={frameFileRef} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFramePhoto(f); }} />
 
       {/* YOUR OWN DECORATION */}
       {customDraft && (
         <CustomDecorSheet draft={customDraft} busy={decorBusy}
           onChange={patch => setCustomDraft(prev => prev && { ...prev, ...patch })}
-          onReplace={() => decorFileRef.current?.click()}
+          onReplace={() => (customDraft.frame ? frameFileRef : decorFileRef).current?.click()}
           onBuiltIn={customDraft.at >= 0 ? () => { const at = customDraft.at; setCustomDraft(null); setDecorPickFor(at); } : undefined}
           onSave={saveCustomDecor}
           onClose={() => setCustomDraft(null)} />
@@ -1968,6 +2025,46 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // A photo frame with a newly picked photo: drawn live as you move it.
+  const framing = !!(draft.frame && draft.photo && draft.place);
+  const smallRef = useRef<HTMLCanvasElement>(null);
+  const bigRef = useRef<HTMLCanvasElement>(null);
+  const [frameImg, setFrameImg] = useState<HTMLImageElement | null>(null);
+  useEffect(() => { if (draft.frame && !frameImg) loadFrame(PHOTO_FRAME.src).then(setFrameImg, () => {}); }, [draft.frame, frameImg]);
+  useEffect(() => {
+    if (!framing || !frameImg || !draft.photo || !draft.place) return;
+    const framed = drawFramed(draft.photo, frameImg, PHOTO_FRAME.window, draft.place, FRAME_EDIT_PX);
+    for (const c of [bigRef.current, smallRef.current]) {
+      if (!c) continue;
+      const ctx = c.getContext('2d')!;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(framed, 0, 0, c.width, c.height);
+    }
+  }, [framing, frameImg, draft.photo, draft.place]);
+  const setPlace = (patch: Partial<FramePlace>) => draft.place && onChange({ place: { ...draft.place, ...patch } });
+  // Dragging moves the photo; a double tap centers it again (as in the Share Studio).
+  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
+  const lastTap = useRef(0);
+  const onPhotoDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) { lastTap.current = 0; setPlace({ x: 0.5, y: 0.5 }); return; }
+    lastTap.current = now;
+    drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPhotoMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId || !draft.photo || !draft.place) return;
+    // From screen pixels to pixels of the opening in the mat.
+    const [l, , r] = PHOTO_FRAME.window;
+    const side = (r - l) * FRAME_EDIT_PX;
+    const k = FRAME_EDIT_PX / e.currentTarget.getBoundingClientRect().width;
+    const p = panFill(draft.photo, side, side, draft.place, (e.clientX - d.x) * k, (e.clientY - d.y) * k);
+    d.x = e.clientX; d.y = e.clientY;
+    setPlace(p);
+  };
+  const onPhotoUp = () => { drag.current = null; };
   const { min, max } = CUSTOM_HEIGHT;
   const height = Math.min(max, Math.max(min, draft.height));
   const setHeight = (h: number) => onChange({ height: Math.round(Math.min(max, Math.max(min, h)) * 100) / 100 });
@@ -1992,7 +2089,7 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
         overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{isNew ? 'Your own decoration' : `Decoration #${draft.at + 1}`}</span>
+          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{draft.frame ? (isNew ? 'Photo frame' : `Photo frame #${draft.at + 1}`) : isNew ? 'Your own decoration' : `Decoration #${draft.at + 1}`}</span>
           <button onClick={onClose} aria-label="Close" style={btnStyle({ secondary: true, small: true })}><X size={14} /></button>
         </div>
         <div style={{ padding: '14px 18px 18px', overflow: 'auto' }}>
@@ -2014,10 +2111,26 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
                 position: 'absolute', bottom: -3, height: 8, borderRadius: '50%', left: `${draft.base[0] * 100}%`, right: `${(1 - draft.base[1]) * 100}%`,
                 background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 72%)',
               }} />
-              <img src={draft.preview} alt={draft.label} draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />
+              {framing
+                ? <canvas ref={smallRef} width={240} height={240} aria-label={draft.label} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />
+                : <img src={draft.preview} alt={draft.label} draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />}
             </div>
             <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 14, background: 'linear-gradient(#e2dfd8, #d8d4cc)', borderTop: '1px solid #cfcac1' }} />
           </div>
+
+          {framing && draft.place && (
+            <div className="admin-frame-photo" style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <canvas ref={bigRef} width={FRAME_EDIT_PX} height={FRAME_EDIT_PX} aria-label="Your photo in the frame. Drag to position it; double-tap to center."
+                  onPointerDown={onPhotoDown} onPointerMove={onPhotoMove} onPointerUp={onPhotoUp} onPointerCancel={onPhotoUp}
+                  style={{ width: 'min(240px, 70vw)', aspectRatio: 1, display: 'block', cursor: 'grab', touchAction: 'none', borderRadius: 2, boxShadow: '0 2px 10px rgba(0,0,0,0.12)' }} />
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>Drag the photo to position it; double-tap to center.</div>
+              <PhotoSlider id="frame-zoom" label="Zoom" value={draft.place.zoom} min={100} max={300} onChange={v => setPlace({ zoom: v })} />
+              <PhotoSlider id="frame-blur" label="Blur" value={draft.place.blur} min={0} max={100} onChange={v => setPlace({ blur: v })} />
+              <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 4, lineHeight: 1.4 }}>Blur keeps the mood of a photo without showing who or what is in it. Only the framed, blurred version is saved.</div>
+            </div>
+          )}
 
           {!draft.transparent && (
             <div role="note" style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, background: '#f6f6f4', fontSize: '0.76rem', lineHeight: 1.45, color: '#666' }}>
@@ -2044,7 +2157,7 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
 
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 18 }}>
             <button type="button" onClick={onReplace} disabled={busy} style={btnStyle({ secondary: true, small: true })}>
-              {busy ? <span className="admin-spinner" /> : <ImagePlus size={13} />} Choose another image…
+              {busy ? <span className="admin-spinner" /> : <ImagePlus size={13} />} {draft.frame ? 'Choose another photo\u2026' : 'Choose another image\u2026'}
             </button>
             {onBuiltIn && <button type="button" onClick={onBuiltIn} style={btnStyle({ secondary: true, small: true })}>Use a built-in one</button>}
             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
@@ -2054,6 +2167,18 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const FRAME_EDIT_PX = 480;
+
+function PhotoSlider({ id, label, value, min, max, onChange }: { id: string; label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+      <label htmlFor={id} style={{ width: 52, flexShrink: 0, fontSize: '0.82rem' }}>{label}</label>
+      <input id={id} type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))}
+        style={{ flex: 1, minWidth: 0, minHeight: 34, accentColor: '#1a1a1a', touchAction: 'none', cursor: 'pointer' }} />
     </div>
   );
 }
