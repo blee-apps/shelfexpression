@@ -7,7 +7,7 @@ import type { Wear } from '../wear';
 export type ShareSize = 'story' | 'post' | 'square';
 // 'shelf' is the Vitsoe 606 (its saved name from before Billy).
 export type ShareLayout = 'grid' | 'shelf' | 'billy' | 'feature';
-export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom';
+export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom' | 'photo';
 
 export interface ShareOptions {
   size: ShareSize;
@@ -19,6 +19,10 @@ export interface ShareOptions {
   synopsis: boolean;          // feature layout
   titles: boolean;            // grid layout
   heading: string;
+  headingFont: 'serif' | 'sans';  // heading and feature titles
+  photoBlur: number;          // 0 to 100, for bg 'photo' (grid only)
+  photoLight: number;         // -100 (darker) to 100 (lighter)
+  photoKey: number;           // changes when a new photo is picked
   footerOn: boolean;
   footer: string;
 }
@@ -42,13 +46,92 @@ export const SIZES: Record<ShareSize, { w: number; h: number; label: string; hin
 
 export const DEFAULT_OPTIONS: ShareOptions = {
   size: 'story', layout: 'grid', bg: 'paper', custom: '#3d4a5c', wear: 'off', align: 'center',
-  synopsis: false, titles: false, heading: '', footerOn: true, footer: '',
+  synopsis: false, titles: false, heading: '', headingFont: 'serif',
+  photoBlur: 40, photoLight: -20, photoKey: 0, footerOn: true, footer: '',
 };
 
 const SERIF = '"DM Serif Text", Georgia, serif';
 const SANS = 'Manrope, "Helvetica Neue", Arial, sans-serif';
 
-type Palette = { bg: string; text: string; sub: string; shadow: number; dark: boolean };
+type Palette = { bg: string; text: string; sub: string; shadow: number; dark: boolean; photo?: HTMLCanvasElement; lumAt?: (x: number, y: number, w: number, h: number) => number };
+
+// The heading font: DM Serif, or Manrope semibold.
+const display = (o: ShareOptions) => o.headingFont === 'sans'
+  ? { family: SANS, weight: 600, scale: 0.9 } : { family: SERIF, weight: 400, scale: 1 };
+
+// --- Your own photo as the background (Grid only) --------------------------
+// Kept in memory only, never saved or published.
+
+let sharePhoto: HTMLImageElement | null = null;
+export const setSharePhoto = (img: HTMLImageElement | null) => { sharePhoto = img; photoCache = null; };
+export const hasSharePhoto = () => !!sharePhoto;
+let photoCache: { key: string; canvas: HTMLCanvasElement; lum: number; lumAt: (x: number, y: number, w: number, h: number) => number } | null = null;
+
+// The photo cropped to fill the frame, softened and lightened or darkened.
+// Blur is done by shrinking and enlarging, which every browser supports.
+function processedPhoto(img: HTMLImageElement, W: number, H: number, blur: number, light: number) {
+  const key = [img.src.length, img.naturalWidth, W, H, blur, light].join('|');
+  if (photoCache && photoCache.key === key) return photoCache;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const c = out.getContext('2d')!;
+  const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+  const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+  const factor = 1 + (blur / 100) * 39;  // up to 40x smaller
+  if (factor <= 1.05) c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  else {
+    // Halve step by step for a smooth blur without blocky edges.
+    let cur: HTMLCanvasElement = document.createElement('canvas');
+    cur.width = W; cur.height = H;
+    cur.getContext('2d')!.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    let cw = W, ch = H;
+    const tw = Math.max(4, Math.round(W / factor)), th = Math.max(4, Math.round(H / factor));
+    while (cw > tw) {
+      const nw = Math.max(tw, Math.round(cw / 2)), nh = Math.max(th, Math.round(ch / 2));
+      const nxt = document.createElement('canvas'); nxt.width = nw; nxt.height = nh;
+      const nc = nxt.getContext('2d')!; nc.imageSmoothingQuality = 'high';
+      nc.drawImage(cur, 0, 0, cw, ch, 0, 0, nw, nh);
+      cur = nxt; cw = nw; ch = nh;
+    }
+    c.imageSmoothingQuality = 'high';
+    // Enlarging slightly past the edges hides the soft border blur leaves.
+    const m = Math.min(W, H) * 0.02 * (blur / 100);
+    c.drawImage(cur, 0, 0, cw, ch, -m, -m, W + m * 2, H + m * 2);
+  }
+  if (light) {
+    c.fillStyle = light < 0 ? `rgba(0,0,0,${-light / 100 * 0.75})` : `rgba(255,255,255,${light / 100 * 0.75})`;
+    c.fillRect(0, 0, W, H);
+  }
+  // How light it is, overall and patch by patch, from a small copy, so each
+  // line of text can pick dark or light ink for what's right behind it.
+  const GW = 54, GH = Math.max(1, Math.round(54 * H / W));
+  const t = document.createElement('canvas'); t.width = GW; t.height = GH;
+  const tc = t.getContext('2d')!; tc.drawImage(out, 0, 0, GW, GH);
+  const d = tc.getImageData(0, 0, GW, GH).data;
+  const grid = new Float32Array(GW * GH);
+  let sum = 0;
+  for (let i = 0; i < grid.length; i++) { grid[i] = luminanceOf(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]); sum += grid[i]; }
+  const lumAt = (x: number, y: number, w: number, h: number) => {
+    const x0 = Math.max(0, Math.floor(x / W * GW)), x1 = Math.min(GW - 1, Math.ceil((x + w) / W * GW));
+    const y0 = Math.max(0, Math.floor(y / H * GH)), y1 = Math.min(GH - 1, Math.ceil((y + h) / H * GH));
+    let s2 = 0, n = 0;
+    for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) { s2 += grid[yy * GW + xx]; n++; }
+    return n ? s2 / n : sum / grid.length;
+  };
+  photoCache = { key, canvas: out, lum: sum / grid.length, lumAt };
+  return photoCache;
+}
+const luminanceOf = (r: number, g: number, b: number) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+// Text over a photo picks dark or light ink for the patch right behind it,
+// with a soft halo so it stays readable on busy spots. (Off a photo, does nothing.)
+const ink = (ctx: CanvasRenderingContext2D, p: Palette, role: 'text' | 'sub', x: number, y: number, w: number, h: number) => {
+  if (!p.photo || !p.lumAt) return;
+  const light = p.lumAt(x, y, w, h) > 0.58;
+  ctx.fillStyle = role === 'text' ? (light ? '#161513' : '#ffffff') : (light ? 'rgba(22,21,19,0.78)' : 'rgba(255,255,255,0.88)');
+  ctx.shadowColor = light ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 16; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+};
+const noInk = (ctx: CanvasRenderingContext2D) => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; };
 
 // --- Colors ---------------------------------------------------------------
 
@@ -91,7 +174,21 @@ const hexToRgb = (h: string): [number, number, number] | null => {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 
-function palette(o: ShareOptions, tint: [number, number, number] | null): Palette {
+function palette(o: ShareOptions, tint: [number, number, number] | null, layout: ShareLayout): Palette {
+  if (o.bg === 'photo' && sharePhoto && layout === 'grid') {
+    const { w, h } = SIZES[o.size];
+    const ph = processedPhoto(sharePhoto, w, h, o.photoBlur, o.photoLight);
+    const light = ph.lum > 0.55;
+    return {
+      bg: light ? '#e8e4dd' : '#222',
+      text: light ? '#161513' : '#ffffff',
+      sub: light ? 'rgba(22,21,19,0.72)' : 'rgba(255,255,255,0.82)',
+      shadow: light ? 0.3 : 0.5,
+      dark: !light,
+      photo: ph.canvas,
+      lumAt: ph.lumAt,
+    };
+  }
   // A picked color is drawn like a cover color: the text turns light or
   // dark to suit it.
   if (o.bg === 'custom') tint = hexToRgb(o.custom);
@@ -282,28 +379,37 @@ export function renderShare(canvas: HTMLCanvasElement, books: ShareBook[], o: Sh
   const { w: W, h: H } = SIZES[o.size];
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-  const p = palette(o, tint);
+  // One book in a grid is a feature; a feature with several books uses a grid.
+  const layout: ShareLayout = books.length === 1 && o.layout === 'grid' ? 'feature' : books.length > 1 && o.layout === 'feature' ? 'grid' : o.layout;
+  const p = palette(o, tint, layout);
   ctx.fillStyle = p.bg;
   ctx.fillRect(0, 0, W, H);
+  if (p.photo) ctx.drawImage(p.photo, 0, 0);
   ctx.textBaseline = 'alphabetic';
   if (!books.length) return;
 
   const pad = 84;
   const story = o.size === 'story';
-  // One book in a grid is a feature; a feature with several books uses a grid.
-  const layout: ShareLayout = books.length === 1 && o.layout === 'grid' ? 'feature' : books.length > 1 && o.layout === 'feature' ? 'grid' : o.layout;
   const featureLeft = layout === 'feature' && o.align === 'left';
 
   // Heading at the top.
   let top = pad + (story ? 60 : 0);
   const heading = o.heading.trim();
   if (heading) {
-    const size = story ? 66 : 58;
-    setFont(ctx, size, SERIF);
+    const df = display(o);
+    const size = Math.round((story ? 66 : 58) * df.scale);
+    setFont(ctx, size, df.family, df.weight);
+    if (df.family === SANS && 'letterSpacing' in ctx) (ctx as any).letterSpacing = '-0.5px';
     ctx.fillStyle = p.text;
     ctx.textAlign = featureLeft ? 'left' : 'center';
     const lines = clampLines(ctx, heading, W - pad * 2, 2);
-    lines.forEach((line, i) => ctx.fillText(line, featureLeft ? pad : W / 2, top + size * 0.82 + i * size * 1.12));
+    lines.forEach((line, i) => {
+      const lw = ctx.measureText(line).width, x = featureLeft ? pad : W / 2, y = top + i * size * 1.12;
+      ink(ctx, p, 'text', featureLeft ? x : x - lw / 2, y, lw, size);
+      ctx.fillText(line, x, y + size * 0.82);
+    });
+    if ('letterSpacing' in ctx) (ctx as any).letterSpacing = '0px';
+    noInk(ctx);
     top += lines.length * size * 1.12 + (story ? 70 : 48);
   }
 
@@ -317,7 +423,10 @@ export function renderShare(canvas: HTMLCanvasElement, books: ShareBook[], o: Sh
     ctx.fillStyle = p.sub;
     ctx.textAlign = featureLeft ? 'left' : 'center';
     if ('letterSpacing' in ctx) (ctx as any).letterSpacing = '1.5px';
-    ctx.fillText(ellipsize(ctx, footer, W - pad * 2), featureLeft ? pad : W / 2, H - 46);
+    const ft = ellipsize(ctx, footer, W - pad * 2), fw = ctx.measureText(ft).width;
+    ink(ctx, p, 'sub', featureLeft ? pad : W / 2 - fw / 2, H - 46 - size, fw, size);
+    ctx.fillText(ft, featureLeft ? pad : W / 2, H - 46);
+    noInk(ctx);
     if ('letterSpacing' in ctx) (ctx as any).letterSpacing = '0px';
     bottom = Math.min(bottom, H - 46 - size - 64);
   }
@@ -357,10 +466,14 @@ function drawGrid(ctx: CanvasRenderingContext2D, books: ShareBook[], o: ShareOpt
         ctx.textAlign = 'left';
         setFont(ctx, lab.t, SANS, 600);
         ctx.fillStyle = p.text;
-        ctx.fillText(ellipsize(ctx, b.title, lw), it.x, y + L.slotH + 20 + lab.t * 0.9);
+        const ty = y + L.slotH + 20;
+        ink(ctx, p, 'text', it.x, ty, lw, lab.t * 1.25 + lab.a * 1.3);
+        ctx.fillText(ellipsize(ctx, b.title, lw), it.x, ty + lab.t * 0.9);
         setFont(ctx, lab.a, SANS, 400);
         ctx.fillStyle = p.sub;
-        ctx.fillText(ellipsize(ctx, b.author, lw), it.x, y + L.slotH + 20 + lab.t * 1.25 + lab.a * 0.95);
+        ink(ctx, p, 'sub', it.x, ty, lw, lab.t * 1.25 + lab.a * 1.3);
+        ctx.fillText(ellipsize(ctx, b.author, lw), it.x, ty + lab.t * 1.25 + lab.a * 0.95);
+        noInk(ctx);
       }
     }
     y += L.slotH + lab.h + rowGap;
@@ -573,7 +686,7 @@ function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOpt
 
   // Measures the text block for a given width and sizes.
   const measure = (tw: number, ts: number, ss: number, maxSynLines: number) => {
-    setFont(ctx, ts, SERIF);
+    { const df = display(o); setFont(ctx, Math.round(ts * df.scale), df.family, df.weight); }
     const title = clampLines(ctx, book.title, tw, 3);
     setFont(ctx, ss, SANS);
     const syn = synopsis ? clampLines(ctx, synopsis, tw, maxSynLines) : [];
@@ -585,7 +698,7 @@ function drawFeature(ctx: CanvasRenderingContext2D, book: ShareBook, o: ShareOpt
   const drawText = (t: ReturnType<typeof measure>, x: number, y: number, align: 'left' | 'center') => {
     ctx.textAlign = align;
     ctx.fillStyle = p.text;
-    setFont(ctx, t.ts, SERIF);
+    { const df = display(o); setFont(ctx, Math.round(t.ts * df.scale), df.family, df.weight); }
     t.title.forEach((line, i) => ctx.fillText(line, x, y + t.ts * 0.85 + i * t.ts * 1.08));
     y += t.title.length * t.ts * 1.08 + 18;
     setFont(ctx, t.as, SANS, 500);

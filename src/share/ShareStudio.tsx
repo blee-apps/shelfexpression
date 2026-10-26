@@ -6,7 +6,7 @@ import { zipSync } from 'fflate';
 import { isDecor, WEAR, type Book } from '../books';
 import { wornCover, isWear, WEAR_OPTIONS, type Wear } from '../wear';
 import { decorDefOf } from '../decor';
-import { renderShare, morphShare, coverColor, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
+import { renderShare, morphShare, coverColor, setSharePhoto, hasSharePhoto, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 import AddForShare, { isTemp } from './AddForShare';
 
 const MAX_ITEMS = 12;
@@ -53,6 +53,8 @@ const loadOptions = (): ShareOptions => {
   try {
     const o = { ...base, ...JSON.parse(localStorage.getItem(OPTIONS_KEY) || '{}'), heading: '' };
     if (!isWear(o.wear)) o.wear = WEAR;
+    // Your photo isn't kept between visits.
+    if (o.bg === 'photo' && !hasSharePhoto()) o.bg = 'paper';
     return o;
   }
   catch { return base; }
@@ -90,6 +92,16 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   // Which book the Cover background takes its color from (the first, unless picked).
   const [tintId, setTintId] = useState<string | null>(null);
 
+  // Your own photo for the Grid background, read on this device only.
+  const pickPhoto = (file?: File) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { setSharePhoto(img); set('photoKey', Date.now()); set('bg', 'photo'); };
+    img.onerror = () => { URL.revokeObjectURL(url); toast("That photo couldn't be opened."); };
+    img.src = url;
+  };
+
   const set = <K extends keyof ShareOptions>(k: K, v: ShareOptions[K]) =>
     setOpts(prev => {
       const next = { ...prev, [k]: v };
@@ -101,7 +113,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   // Fonts used on the image.
   useEffect(() => {
     Promise.race([
-      Promise.all(['72px "DM Serif Text"', '400 30px Manrope', '500 30px Manrope', '600 30px Manrope'].map(f => document.fonts.load(f))),
+      Promise.all(['72px "DM Serif Text"', '400 30px Manrope', '500 30px Manrope', '600 30px Manrope', '600 60px Manrope'].map(f => document.fonts.load(f))),
       new Promise(r => setTimeout(r, 2500)),
     ]).finally(() => setFontsReady(true));
   }, []);
@@ -151,6 +163,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   // decorations it falls back to a grid.
   const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' && !features.length ? 'grid' : opts.layout;
   const featureSet = layout === 'feature' && !single;
+  const photoOK = layout === 'grid' && !featureSet;
   const carouselOn = featureSet || (carousel.on && order.length > 1 && features.length > 0);
   const slideCount = featureSet ? features.length : carouselOn ? 1 + features.length : 1;
   const current = Math.min(slide, slideCount - 1);
@@ -466,6 +479,20 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   onChange={e => { set('custom', e.target.value); set('bg', 'custom'); }}
                   style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
               </label>
+              {photoOK && (
+                // Your own photo: tapping opens the photo picker (or reuses the one you picked).
+                <label style={{ cursor: 'pointer', textAlign: 'center', position: 'relative' }}
+                  onClick={e => { if (hasSharePhoto() && opts.bg !== 'photo') { e.preventDefault(); set('bg', 'photo'); } }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 22, border: '1px solid #ddd', outline: opts.bg === 'photo' ? '2px solid #1a1a1a' : 'none', outlineOffset: 2,
+                    background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="9" cy="10" r="1.8" /><path d="m4 18 5-5 4 4 3-3 4 4" /></svg>
+                  </div>
+                  <div style={{ fontSize: 11, color: opts.bg === 'photo' ? '#1a1a1a' : '#888', marginTop: 5 }}>Photo</div>
+                  <input type="file" accept="image/*" aria-label="Background photo"
+                    onChange={e => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }}
+                    style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0, cursor: 'pointer', border: 'none', padding: 0, display: hasSharePhoto() && opts.bg !== 'photo' ? 'none' : 'block' }} />
+                </label>
+              )}
               {opts.bg === 'cover' && order.length > 1 && !featureSet && (
                 // Pages through the chosen books to pick which cover sets the color.
                 <div className="share-tint-picker" style={{ display: 'flex', alignItems: 'center', height: 44, marginLeft: 4 }}>
@@ -477,6 +504,13 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                 </div>
               )}
             </div>
+            {photoOK && opts.bg === 'photo' && (
+              <div style={{ marginTop: 12 }}>
+                <Slider label="Blur" value={opts.photoBlur} min={0} max={100} onChange={v => set('photoBlur', v)} />
+                <Slider label="Brightness" value={opts.photoLight} min={-100} max={100} onChange={v => set('photoLight', v)} />
+                <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>Tap Photo again to pick another. Your photo stays on this device.</div>
+              </div>
+            )}
           </Section>
 
           {order.length > 1 && features.length > 0 && !featureSet && (
@@ -517,6 +551,10 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
           <Section label="Heading" hint={featureSet ? 'Optional, on the first image' : 'Optional'}>
             <input value={opts.heading} onChange={e => setOpts(o => ({ ...o, heading: e.target.value }))}
               placeholder="e.g. My favorite books of 2026" style={input} />
+            <div style={{ marginTop: 10 }}>
+              <Segmented value={opts.headingFont} onChange={v => set('headingFont', v as 'serif' | 'sans')}
+                items={[{ value: 'serif', label: 'Serif' }, { value: 'sans', label: 'Sans' }]} />
+            </div>
           </Section>
 
           <Section label="Footer">
@@ -631,6 +669,16 @@ function Segmented({ value, onChange, items }: { value: string; onChange: (v: st
         </button>
       ))}
     </div>
+  );
+}
+
+function Slider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, minHeight: 36 }}>
+      <span style={{ width: 82, flexShrink: 0 }}>{label}</span>
+      <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))}
+        style={{ flex: 1, minHeight: 28, accentColor: '#1a1a1a' }} />
+    </label>
   );
 }
 
