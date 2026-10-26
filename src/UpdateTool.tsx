@@ -3,7 +3,7 @@ import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRi
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
 import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
-import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef, PHOTO_FRAME } from './decor';
+import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef, PHOTO_FRAME, frameMaxHeight } from './decor';
 import { prepareDecorImage, loadPhoto, loadFrame, drawFramed, framedDecor, FramePlace } from './decorUpload';
 import { panFill } from './photoFill';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
@@ -2065,7 +2065,9 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
     setPlace(p);
   };
   const onPhotoUp = () => { drag.current = null; };
-  const { min, max } = CUSTOM_HEIGHT;
+  // A photo frame stops at a book's width, so it always takes one slot.
+  const { min } = CUSTOM_HEIGHT;
+  const max = draft.frame ? frameMaxHeight(draft.aspect) : CUSTOM_HEIGHT.max;
   const height = Math.min(max, Math.max(min, draft.height));
   const setHeight = (h: number) => onChange({ height: Math.round(Math.min(max, Math.max(min, h)) * 100) / 100 });
   // Book and decoration at the same scale, shrunk together if they don't fit.
@@ -2148,7 +2150,7 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
             <span style={{ fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums', width: 42, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
           </div>
           <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 4, lineHeight: 1.4 }}>
-            {pct >= 100 ? 'As tall as a paperback.' : `${pct}% as tall as a paperback.`}{wide ? ' It\u2019s wider than a book, so it takes two slots on the shelf.' : ''}
+            {pct >= 100 ? 'As tall as a paperback.' : `${pct}% as tall as a paperback.`}{wide ? ' It\u2019s wider than a book, so it takes two slots on the shelf.' : ''}{draft.frame && height >= max ? ' As wide as a book: the biggest that fits one slot.' : ''}
           </div>
 
           <label style={labelStyle} htmlFor="custom-decor-label">Name</label>
