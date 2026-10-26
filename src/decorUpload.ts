@@ -1,3 +1,4 @@
+import { fillPhoto, PhotoPlace } from './photoFill';
 // Your own decoration: a transparent PNG (or WebP) picked in the editor.
 // It's tidied up in the browser before it waits with the new covers:
 // the see-through margins are cut off (so the bottom edge is where it
@@ -90,18 +91,24 @@ export async function prepareDecorImage(file: Blob): Promise<PreparedDecor> {
   return { blob, ext, preview: URL.createObjectURL(blob), aspect: round(out.width / out.height, 4), base, transparent };
 }
 
-// The photo frame: your photo (any JPEG, PNG or WebP, HEIC on iPhone is
-// turned into a JPEG when picked) is cropped square from the middle, put
-// behind the frame's mat and saved as one image.
-export async function framePhoto(file: Blob, frameSrc: string, window: readonly [number, number, number, number]): Promise<PreparedDecor> {
-  const photo = await loadImage(file);
-  const frame = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Couldn\u2019t load the frame'));
-    img.src = frameSrc;
-  });
-  const size = Math.min(800, frame.naturalWidth || 800);
+// The photo frame: your photo (any JPEG, PNG or WebP; iPhone turns HEIC
+// into a JPEG when it's picked) placed behind the frame's mat, with the same
+// pan, zoom and blur as the Share Studio's photo background. Only the framed
+// result is saved, so a blurred photo is never published sharp.
+
+export const loadPhoto = loadImage;
+
+export const loadFrame = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error('Couldn\u2019t load the frame'));
+  img.src = src;
+});
+
+export type FramePlace = PhotoPlace & { blur: number };
+
+/** The framed photo drawn at size x size. */
+export function drawFramed(photo: HTMLImageElement, frame: HTMLImageElement, window: readonly [number, number, number, number], place: FramePlace, size: number): HTMLCanvasElement {
   const out = document.createElement('canvas');
   out.width = out.height = size;
   const ctx = out.getContext('2d')!;
@@ -109,17 +116,20 @@ export async function framePhoto(file: Blob, frameSrc: string, window: readonly 
   // A hair bigger than the opening, so no gap shows at the mat's edge.
   const bleed = 0.006;
   const [l, t, r, b] = window;
-  const wx = (l - bleed) * size, wy = (t - bleed) * size;
-  const ww = (r - l + bleed * 2) * size, wh = (b - t + bleed * 2) * size;
-  const pw = photo.naturalWidth, ph = photo.naturalHeight;
-  if (!pw || !ph) throw new Error('That image is empty');
-  const crop = Math.min(pw / ww, ph / wh);
-  const sw = ww * crop, sh = wh * crop;
-  ctx.drawImage(photo, (pw - sw) / 2, (ph - sh) / 2, sw, sh, wx, wy, ww, wh);
+  const wx = Math.floor((l - bleed) * size), wy = Math.floor((t - bleed) * size);
+  const ww = Math.ceil((r - l + bleed * 2) * size), wh = Math.ceil((b - t + bleed * 2) * size);
+  // Blur scales with the opening: at 100 it's strong enough that faces and
+  // text can't be made out, leaving just the colors and light.
+  ctx.drawImage(fillPhoto(photo, ww, wh, place, (place.blur / 100) * ww * 0.06), wx, wy);
   ctx.drawImage(frame, 0, 0, size, size);
+  return out;
+}
+
+/** The framed photo, ready to wait with the new covers. */
+export async function framedDecor(canvas: HTMLCanvasElement): Promise<PreparedDecor> {
   // WebP keeps it small; browsers that can't write it get a PNG.
-  let blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, 'image/webp', 0.88));
-  if (!blob || blob.type !== 'image/webp') blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, 'image/png'));
+  let blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.88));
+  if (!blob || blob.type !== 'image/webp') blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Couldn\u2019t prepare the photo');
   const ext = blob.type === 'image/webp' ? 'webp' : 'png';
   return { blob, ext, preview: URL.createObjectURL(blob), aspect: 1, base: [0, 1], transparent: true };

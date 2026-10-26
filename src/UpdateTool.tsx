@@ -4,7 +4,8 @@ import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf'
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
 import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef, PHOTO_FRAME } from './decor';
-import { prepareDecorImage, framePhoto } from './decorUpload';
+import { prepareDecorImage, loadPhoto, loadFrame, drawFramed, framedDecor, FramePlace } from './decorUpload';
+import { panFill } from './photoFill';
 import ShareStudio, { clearShareExtras } from './share/ShareStudio';
 import StaticSitePanel from './StaticSitePanel';
 import SiteDetailsPanel from './SiteDetailsPanel';
@@ -45,7 +46,12 @@ type CustomDraft = {
   preview: string; transparent: boolean;
   src?: string; blob?: Blob; ext?: 'png' | 'webp';
   frame?: boolean;
+  // A photo frame with a newly picked photo: the photo and how it sits.
+  // (Once saved only the framed image is kept, so reopening one shows that.)
+  photo?: HTMLImageElement; place?: FramePlace;
 };
+
+const FRAME_START: FramePlace = { x: 0.5, y: 0.5, zoom: 100, blur: 0 };
 
 const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
@@ -433,11 +439,13 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const pickFramePhoto = async (file: File) => {
     setDecorBusy(true);
     try {
-      const img = await framePhoto(file, PHOTO_FRAME.src, PHOTO_FRAME.window);
+      const photo = await loadPhoto(file);
+      if (!photo.naturalWidth || !photo.naturalHeight) throw new Error('That image is empty');
       const at = customDraft ? customDraft.at : decorPickFor;
+      // A new photo starts centered; blur carries over.
       setCustomDraft(prev => prev
-        ? { ...prev, src: undefined, blob: img.blob, ext: img.ext, preview: img.preview, aspect: img.aspect, base: img.base, transparent: true, frame: true }
-        : { at, label: PHOTO_FRAME.label, height: PHOTO_FRAME.height, blob: img.blob, ext: img.ext, preview: img.preview, aspect: img.aspect, base: img.base, transparent: true, frame: true });
+        ? { ...prev, src: undefined, blob: undefined, photo, place: { ...FRAME_START, blur: prev.place?.blur ?? 0 }, aspect: 1, base: [0, 1], transparent: true, frame: true }
+        : { at, label: PHOTO_FRAME.label, height: PHOTO_FRAME.height, preview: '', photo, place: FRAME_START, aspect: 1, base: [0, 1], transparent: true, frame: true });
       setDecorPickFor(-1);
     } catch (err: any) {
       showToast(`Couldn\u2019t use that photo: ${err.message}.`);
@@ -452,10 +460,24 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     setCustomDraft({ at: i, label: c.label, height: c.height, src: c.src, preview: coverSrc(c.src), aspect: c.aspect, base: c.base, transparent: true, frame: !!c.frame });
   };
 
-  const saveCustomDecor = () => {
-    const d = customDraft;
+  const saveCustomDecor = async () => {
+    let d = customDraft;
     if (!d) return;
     if (d.at === NEW_BOOK && filledCount >= SLOT_COUNT) { showToast(`The shelf is full (${SLOT_COUNT} slots). Remove something first.`); return; }
+    // A photo frame: the photo is framed now, at full size, as it's set.
+    if (d.photo && d.place) {
+      setDecorBusy(true);
+      try {
+        const frame = await loadFrame(PHOTO_FRAME.src);
+        const img = await framedDecor(drawFramed(d.photo, frame, PHOTO_FRAME.window, d.place, 800));
+        d = { ...d, blob: img.blob, ext: img.ext };
+      } catch (err: any) {
+        setDecorBusy(false);
+        showToast(`Couldn\u2019t frame that photo: ${err.message}.`);
+        return;
+      }
+      setDecorBusy(false);
+    }
     const src = d.blob ? addPendingCover(d.frame ? 'frame' : 'decor', d.blob, d.ext) : d.src;
     const custom = customDecor({ decor: CUSTOM_DECOR, src, label: d.label, height: d.height, aspect: d.aspect, base: d.base, frame: d.frame || undefined });
     if (!custom) { showToast('Couldn\u2019t use that image.'); return; }
@@ -2003,6 +2025,46 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // A photo frame with a newly picked photo: drawn live as you move it.
+  const framing = !!(draft.frame && draft.photo && draft.place);
+  const smallRef = useRef<HTMLCanvasElement>(null);
+  const bigRef = useRef<HTMLCanvasElement>(null);
+  const [frameImg, setFrameImg] = useState<HTMLImageElement | null>(null);
+  useEffect(() => { if (draft.frame && !frameImg) loadFrame(PHOTO_FRAME.src).then(setFrameImg, () => {}); }, [draft.frame, frameImg]);
+  useEffect(() => {
+    if (!framing || !frameImg || !draft.photo || !draft.place) return;
+    const framed = drawFramed(draft.photo, frameImg, PHOTO_FRAME.window, draft.place, FRAME_EDIT_PX);
+    for (const c of [bigRef.current, smallRef.current]) {
+      if (!c) continue;
+      const ctx = c.getContext('2d')!;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(framed, 0, 0, c.width, c.height);
+    }
+  }, [framing, frameImg, draft.photo, draft.place]);
+  const setPlace = (patch: Partial<FramePlace>) => draft.place && onChange({ place: { ...draft.place, ...patch } });
+  // Dragging moves the photo; a double tap centers it again (as in the Share Studio).
+  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
+  const lastTap = useRef(0);
+  const onPhotoDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const now = Date.now();
+    if (now - lastTap.current < 320) { lastTap.current = 0; setPlace({ x: 0.5, y: 0.5 }); return; }
+    lastTap.current = now;
+    drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPhotoMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId || !draft.photo || !draft.place) return;
+    // From screen pixels to pixels of the opening in the mat.
+    const [l, , r] = PHOTO_FRAME.window;
+    const side = (r - l) * FRAME_EDIT_PX;
+    const k = FRAME_EDIT_PX / e.currentTarget.getBoundingClientRect().width;
+    const p = panFill(draft.photo, side, side, draft.place, (e.clientX - d.x) * k, (e.clientY - d.y) * k);
+    d.x = e.clientX; d.y = e.clientY;
+    setPlace(p);
+  };
+  const onPhotoUp = () => { drag.current = null; };
   const { min, max } = CUSTOM_HEIGHT;
   const height = Math.min(max, Math.max(min, draft.height));
   const setHeight = (h: number) => onChange({ height: Math.round(Math.min(max, Math.max(min, h)) * 100) / 100 });
@@ -2049,10 +2111,26 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
                 position: 'absolute', bottom: -3, height: 8, borderRadius: '50%', left: `${draft.base[0] * 100}%`, right: `${(1 - draft.base[1]) * 100}%`,
                 background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.12) 45%, rgba(0,0,0,0) 72%)',
               }} />
-              <img src={draft.preview} alt={draft.label} draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />
+              {framing
+                ? <canvas ref={smallRef} width={240} height={240} aria-label={draft.label} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />
+                : <img src={draft.preview} alt={draft.label} draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', filter: 'drop-shadow(3px -2px 8px rgba(0,0,0,0.10))' }} />}
             </div>
             <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 14, background: 'linear-gradient(#e2dfd8, #d8d4cc)', borderTop: '1px solid #cfcac1' }} />
           </div>
+
+          {framing && draft.place && (
+            <div className="admin-frame-photo" style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <canvas ref={bigRef} width={FRAME_EDIT_PX} height={FRAME_EDIT_PX} aria-label="Your photo in the frame. Drag to position it; double-tap to center."
+                  onPointerDown={onPhotoDown} onPointerMove={onPhotoMove} onPointerUp={onPhotoUp} onPointerCancel={onPhotoUp}
+                  style={{ width: 'min(240px, 70vw)', aspectRatio: 1, display: 'block', cursor: 'grab', touchAction: 'none', borderRadius: 2, boxShadow: '0 2px 10px rgba(0,0,0,0.12)' }} />
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 8, textAlign: 'center', lineHeight: 1.4 }}>Drag the photo to position it; double-tap to center.</div>
+              <PhotoSlider id="frame-zoom" label="Zoom" value={draft.place.zoom} min={100} max={300} onChange={v => setPlace({ zoom: v })} />
+              <PhotoSlider id="frame-blur" label="Blur" value={draft.place.blur} min={0} max={100} onChange={v => setPlace({ blur: v })} />
+              <div style={{ fontSize: '0.72rem', color: '#999', marginTop: 4, lineHeight: 1.4 }}>Blur keeps the mood of a photo without showing who or what is in it. Only the framed, blurred version is saved.</div>
+            </div>
+          )}
 
           {!draft.transparent && (
             <div role="note" style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, background: '#f6f6f4', fontSize: '0.76rem', lineHeight: 1.45, color: '#666' }}>
@@ -2089,6 +2167,18 @@ function CustomDecorSheet({ draft, busy, onChange, onReplace, onBuiltIn, onSave,
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const FRAME_EDIT_PX = 480;
+
+function PhotoSlider({ id, label, value, min, max, onChange }: { id: string; label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+      <label htmlFor={id} style={{ width: 52, flexShrink: 0, fontSize: '0.82rem' }}>{label}</label>
+      <input id={id} type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))}
+        style={{ flex: 1, minWidth: 0, minHeight: 34, accentColor: '#1a1a1a', touchAction: 'none', cursor: 'pointer' }} />
     </div>
   );
 }
