@@ -1202,15 +1202,20 @@ export default function App() {
           z-index: 0;
           background: #F4F2EE;
         }
+        .shelf-wall { background: linear-gradient(to bottom, rgba(244,242,238,0), #F4F2EE 64px); }
+        .dark .shelf-wall { background: linear-gradient(to bottom, rgba(27,27,28,0), #1b1b1c 64px); }
 
         /* E-Track: a slim satin aluminium upright with a column of slots */
+        /* The tracks are cut to length: each ends cleanly a little below the
+           top of the wall, above the first row of books. */
         .shelf-track {
           position: absolute;
-          top: 0;
+          top: 18px;
           bottom: 0;
+          border-radius: 1.5px 1.5px 0 0;
           width: 10px;
           background: linear-gradient(to right, #c3c5c8 0, #dcdee0 1px, #e6e7e9 50%, #d6d8db calc(100% - 1px), #b9bbbe 100%);
-          box-shadow: 2px 0 3px rgba(0,0,0,0.05);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 2px 0 3px rgba(0,0,0,0.05), 1px -1px 2px rgba(0,0,0,0.06);
         }
         .shelf-track::before {
           content: '';
@@ -1243,10 +1248,9 @@ export default function App() {
             0 28px 36px -14px rgba(0,0,0,0.14);
         }
         /* Dark: a charcoal wall with graphite tracks and shelves, matching the share image's Dark shelf */
-        .dark .shelf-wall { background: #1b1b1c; }
         .dark .shelf-track {
           background: linear-gradient(to right, #3e3f42 0, #6d6f73 1px, #7a7c80 50%, #66686c calc(100% - 1px), #3e3f42 100%);
-          box-shadow: 2px 0 4px rgba(0,0,0,0.35);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 2px 0 4px rgba(0,0,0,0.35), 1px -1px 3px rgba(0,0,0,0.3);
         }
         .dark .shelf-track::before {
           background: repeating-linear-gradient(to bottom, rgba(0,0,0,0.45) 0 7px, transparent 7px 16px);
@@ -1371,7 +1375,7 @@ export default function App() {
           {SHELF_STYLE === 'billy' && <BillyStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 pt-8 md:pt-12 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
             {SHELF_ITEMS.map((book) => {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;
