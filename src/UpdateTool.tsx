@@ -1238,9 +1238,9 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               style={{ ...btnStyle({ secondary: true }), ...(filledCount >= SLOT_COUNT ? { opacity: 0.45, cursor: 'default' } : {}) }}>
               <Flower2 size={15} /> Add decoration
             </button>
-            <span style={{ fontSize: '0.75rem', color: '#999' }}>
-              {filledCount >= SLOT_COUNT ? 'The shelf is full. Remove something to add another.' : 'New ones go in at the top.'}
-            </span>
+            {filledCount >= SLOT_COUNT && (
+              <span style={{ fontSize: '0.75rem', color: '#999' }}>The shelf is full. Remove something to add another.</span>
+            )}
           </div>
         )}
         {!shareMode && hasDecor && !useVitsoeShelf && <MinimalDecorWarning />}
