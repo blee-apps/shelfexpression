@@ -41,7 +41,8 @@ Open the editor with **Cmd+Shift+U** on a Mac or **Ctrl+Shift+U** on Windows and
 3. Choose a cover. They're sorted sharpest first and labeled with their size. Anything too small to look crisp is flagged *Low-res*. You can also upload your own.
 4. Tap a book to edit it, and drag its number to reorder. Each book also has **Share** and **Remove**.
 5. Tap **Add decoration** to put a cactus, snow globe, figure, speaker, film camera, trophy or reed diffuser on the shelf, or a **Photo frame** with any photo you choose. It takes a slot like a book, stands at its real size next to your paperbacks, and moves and removes the same way. To use your own, choose **Upload your own**, pick a PNG with a transparent background, and set how tall it stands next to a paperback. They look best used sparingly, to fill an empty spot at the end of the bottom or top shelf. Decorations show on the **Vitsoe** and **Billy** shelves, not the **Minimal** one.
-6. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
+6. Choose how visitors see your books with **Sort**: **Manual** (your own order), **Year** (newest or oldest first), **Title** (ignoring "The" and "A"), **Author** (by surname, like a bookshop) or **Random** (a new order every visit). Decorations stay where you put them, and the editor's list always keeps your own order, so you can switch back to Manual at any time.
+7. Tap **Save** at the top. Covers are already in `content/covers/`, and Save writes your books, look and share footer into `content/books.json`.
 
 ### 5. Publish
 

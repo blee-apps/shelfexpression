@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { X, Search, Copy, GripVertical, Upload, RotateCw, ChevronLeft, ChevronRight, Sparkles, Plus, Share2, ClipboardPaste, Globe, PenLine, Flower2, AlertTriangle, ImagePlus, Minus, ArrowUpCircle, ChevronDown, BookDown } from 'lucide-react';
 import { coverCache, fetchingSet, aspectRatioCache } from '../digital_bookshelf';
 import { WEAR_OPTIONS, isWear, type Wear } from './wear';
-import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
+import { Book, SHELF_STYLE, ShelfStyle, COLOR_MODE, WEAR, ColorMode, SHARE_FOOTER, SORT_ORDER, SortOrder, isSortOrder, isDecor, decorBook, decorFromRaw, decorEntry } from './books';
 import { DECOR_CATALOGUE, decorById, decorDefOf, customDecor, CUSTOM_DECOR, CUSTOM_HEIGHT, CUSTOM_LABEL, BOOK_ASPECT, DecorDef, PHOTO_FRAME, customMaxHeight } from './decor';
 import { prepareDecorImage, loadPhoto, loadFrame, drawFramed, framedDecor, FramePlace } from './decorUpload';
 import { panFill } from './photoFill';
@@ -129,6 +129,8 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   const useVitsoeShelf = shelfStyle !== 'minimal';
   const [colorMode, setColorMode] = useState<ColorMode>(COLOR_MODE);
   const [wear, setWear] = useState<Wear>(WEAR);
+  // How visitors see the books ordered. This list always stays in your own order.
+  const [sortOrder, setSortOrder] = useState<SortOrder>(SORT_ORDER);
 
   // Publishing (live site only). `baseJson` is the books.json this editor
   // started from, so Publish can tell if GitHub changed in the meantime.
@@ -229,6 +231,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       else if (typeof data.useVitsoeShelf === 'boolean') setShelfStyle(data.useVitsoeShelf ? 'vitsoe' : 'minimal');
       setColorMode(data.colorMode === 'dark' || data.colorMode === 'auto' ? data.colorMode : 'light');
       setWear(isWear(data.wear) ? data.wear : 'off');
+      setSortOrder(isSortOrder(data.sort) ? data.sort : 'manual');
       if (typeof data.share?.footer === 'string') setShareFooter(data.share.footer);
     }
   };
@@ -847,6 +850,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
     // useVitsoeShelf stays for older builds; Billy is a Vitsoe-style layout.
     const data: Record<string, unknown> = { useVitsoeShelf, ...(shelfStyle === 'billy' ? { shelf: 'billy' } : {}), colorMode, books };
     if (wear !== 'off') data.wear = wear;
+    if (sortOrder !== 'manual') data.sort = sortOrder;
     if (shareFooter !== undefined) data.share = { footer: shareFooter };
     return JSON.stringify(data, null, 2) + '\n';
   };
@@ -1486,7 +1490,19 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
             title="Auto follows each visitor's device setting" />
           <LookSwitch label="Wear" value={wear} onChange={v => setWear(v as Wear)} items={WEAR_OPTIONS}
             title="Makes the covers look read and handled" />
+          <LookSwitch label="Sort" value={sortOrder.startsWith('year') ? 'year' : sortOrder}
+            onChange={v => setSortOrder(v === 'year' ? (sortOrder.startsWith('year') ? sortOrder : 'year-desc') : v as SortOrder)}
+            items={SORT_OPTIONS} title="How visitors see your books ordered. Decorations stay where you put them." />
+          {sortOrder.startsWith('year') && (
+            <LookSwitch label="Year" value={sortOrder} onChange={v => setSortOrder(v as SortOrder)}
+              items={[{ value: 'year-desc', label: 'Newest first' }, { value: 'year-asc', label: 'Oldest first' }]} />
+          )}
         </div>
+        {sortOrder !== 'manual' && (
+          <div style={{ fontSize: '0.78rem', color: '#888', textAlign: 'center', margin: '-10px auto 22px', maxWidth: 580 }}>
+            {SORT_NOTES[sortOrder]} Your own order is kept for Manual.
+          </div>
+        )}
         {hasDecor && !useVitsoeShelf && <div style={{ margin: '-10px auto 22px', maxWidth: 520 }}><MinimalDecorWarning /></div>}
 
         {!shareMode && (
@@ -2344,6 +2360,20 @@ function BookCover({ book }: { book: Book }) {
 
 // --- STYLE HELPERS ---
 // A small segmented switch for the shelf's look.
+const SORT_OPTIONS = [
+  { value: 'manual', label: 'Manual' }, { value: 'year', label: 'Year' }, { value: 'title', label: 'Title' },
+  { value: 'author', label: 'Author' }, { value: 'random', label: 'Random' },
+];
+
+const SORT_NOTES: Record<SortOrder, string> = {
+  'manual': '',
+  'year-desc': 'Visitors see the newest books first.',
+  'year-asc': 'Visitors see the oldest books first.',
+  'title': 'Visitors see books A to Z by title, ignoring \u201cThe\u201d and \u201cA\u201d.',
+  'author': 'Visitors see books A to Z by author\u2019s surname.',
+  'random': 'Visitors see the books in a new order every visit.',
+};
+
 function LookSwitch({ label, value, onChange, items, title }: { label: string; value: string; onChange: (v: string) => void; items: { value: string; label: string }[]; title?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={title}>

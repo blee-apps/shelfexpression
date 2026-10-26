@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, SHELF_ITEMS, USE_VITSOE_SHELF, SHELF_STYLE, COLOR_MODE, WEAR, isDecor } from './src/books';
+import { Book, BOOKS, SHELF_ITEMS, MANUAL_ITEMS, USE_VITSOE_SHELF, SHELF_STYLE, COLOR_MODE, WEAR, isDecor } from './src/books';
 import { wearArt, wearLevel, type WearArt } from './src/wear';
 import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
@@ -1648,7 +1648,7 @@ export default function App() {
         </div>
       )}
       <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center text-white text-xl">Loading admin…</div>}>
-        {showAdmin && <AdminGate books={SHELF_ITEMS} onClose={() => setShowAdmin(false)} />}
+        {showAdmin && <AdminGate books={MANUAL_ITEMS} onClose={() => setShowAdmin(false)} />}
       </Suspense>
     </div>
   );
