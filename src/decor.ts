@@ -28,7 +28,7 @@ export const DECOR_CATALOGUE: DecorDef[] = [
   { id: 'speaker', label: 'Speaker', src: '/decor/speaker.webp', height: 0.48, aspect: 902 / 800, base: [0.22, 0.78] },
   // No wider than 2/3 of a paperback (measured): width = 2/3 × the book's width.
   { id: 'camera', label: 'Film camera', src: '/decor/camera.webp', height: (2 / 3) * BOOK_ASPECT / CAMERA_ASPECT, aspect: CAMERA_ASPECT, base: [0.03, 0.97] },
-  { id: 'trophy', label: 'Trophy', src: '/decor/trophy.webp', height: 0.42, aspect: 954 / 800, base: [0.26, 0.74] },
+  { id: 'trophy', label: 'Trophy', src: '/decor/trophy.webp', height: 0.62, aspect: 510 / 654, base: [0.24, 0.76] },
   // The reeds make it tall; the bottle itself is about a third of a paperback.
   { id: 'diffuser', label: 'Reed diffuser', src: '/decor/diffuser.webp', height: 0.8, aspect: 424 / 800, base: [0.3, 0.73] },
 ];
