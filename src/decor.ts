@@ -69,16 +69,17 @@ const round = (v: number, places: number) => Math.round(v * 10 ** places) / 10 *
 
 // A custom decoration's details from books.json, tidied up; undefined when
 // there's no usable image.
-// A photo frame never gets wider than a book, so it always fits one slot
-// (a square frame tops out at two thirds of a paperback's height).
-export const frameMaxHeight = (aspect: number) => Math.floor((BOOK_ASPECT / aspect) * 100) / 100;
+// The tallest your own decoration can be at its shape: never wider than two
+// books (the most a shelf gives one item), and a photo frame never wider than
+// one, so it always fits a single slot. Never taller than a paperback.
+export const customMaxHeight = (aspect: number, frame?: boolean) =>
+  Math.min(CUSTOM_HEIGHT.max, Math.floor(((frame ? 1 : 2) * BOOK_ASPECT / aspect) * 100) / 100);
 
 export function customDecor(raw: any): CustomDecor | undefined {
   if (raw?.decor !== CUSTOM_DECOR || typeof raw.src !== 'string' || !CUSTOM_SRC.test(raw.src)) return undefined;
   const aspect = num(raw.aspect, 1) > 0 ? round(Math.min(10, num(raw.aspect, 1)), 4) : 1;
   const frame = raw.frame === true;
-  const max = frame ? frameMaxHeight(aspect) : CUSTOM_HEIGHT.max;
-  const height = round(Math.min(max, Math.max(0.05, num(raw.height, CUSTOM_HEIGHT.default))), 3);
+  const height = round(Math.min(customMaxHeight(aspect, frame), Math.max(0.05, num(raw.height, CUSTOM_HEIGHT.default))), 3);
   const b = Array.isArray(raw.base) ? raw.base.map((x: unknown) => num(x, NaN)) : [];
   const base: [number, number] = b.length === 2 && b[0] >= 0 && b[1] <= 1 && b[0] < b[1] ? [round(b[0], 3), round(b[1], 3)] : [0.1, 0.9];
   const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim().slice(0, 40) : CUSTOM_LABEL;
