@@ -89,3 +89,38 @@ export async function prepareDecorImage(file: Blob): Promise<PreparedDecor> {
   const ext = blob.type === 'image/webp' ? 'webp' : 'png';
   return { blob, ext, preview: URL.createObjectURL(blob), aspect: round(out.width / out.height, 4), base, transparent };
 }
+
+// The photo frame: your photo (any JPEG, PNG or WebP, HEIC on iPhone is
+// turned into a JPEG when picked) is cropped square from the middle, put
+// behind the frame's mat and saved as one image.
+export async function framePhoto(file: Blob, frameSrc: string, window: readonly [number, number, number, number]): Promise<PreparedDecor> {
+  const photo = await loadImage(file);
+  const frame = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Couldn\u2019t load the frame'));
+    img.src = frameSrc;
+  });
+  const size = Math.min(800, frame.naturalWidth || 800);
+  const out = document.createElement('canvas');
+  out.width = out.height = size;
+  const ctx = out.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  // A hair bigger than the opening, so no gap shows at the mat's edge.
+  const bleed = 0.006;
+  const [l, t, r, b] = window;
+  const wx = (l - bleed) * size, wy = (t - bleed) * size;
+  const ww = (r - l + bleed * 2) * size, wh = (b - t + bleed * 2) * size;
+  const pw = photo.naturalWidth, ph = photo.naturalHeight;
+  if (!pw || !ph) throw new Error('That image is empty');
+  const crop = Math.min(pw / ww, ph / wh);
+  const sw = ww * crop, sh = wh * crop;
+  ctx.drawImage(photo, (pw - sw) / 2, (ph - sh) / 2, sw, sh, wx, wy, ww, wh);
+  ctx.drawImage(frame, 0, 0, size, size);
+  // WebP keeps it small; browsers that can't write it get a PNG.
+  let blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, 'image/webp', 0.88));
+  if (!blob || blob.type !== 'image/webp') blob = await new Promise<Blob | null>(resolve => out.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Couldn\u2019t prepare the photo');
+  const ext = blob.type === 'image/webp' ? 'webp' : 'png';
+  return { blob, ext, preview: URL.createObjectURL(blob), aspect: 1, base: [0, 1], transparent: true };
+}

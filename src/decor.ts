@@ -46,11 +46,23 @@ export const decorById = (id?: string): DecorDef | undefined =>
 //   { "id", "type": "decor", "decor": "custom", "label": "My speaker",
 //     "src": "/covers/decor-abc.png", "height": 0.5, "aspect": 1.23, "base": [0.1, 0.9] }
 export const CUSTOM_DECOR = 'custom';
+
+// The photo frame: a square black frame with a white mat. Your photo is put
+// into it in the editor and saved as one image, so it's just your own
+// decoration from then on ("frame": true lets the editor offer a new photo
+// instead of a new image).
+export const PHOTO_FRAME = {
+  src: '/decor/frame.webp',
+  // The opening in the mat, as fractions of the frame (left, top, right, bottom).
+  window: [0.17, 0.17, 0.83, 0.83] as const,
+  height: 0.6,
+  label: 'Photo frame',
+};
 export const CUSTOM_HEIGHT = { min: 0.15, max: 1, default: 0.5 };
 export const CUSTOM_LABEL = 'My decoration';
 const CUSTOM_SRC = /^\/covers\/[a-zA-Z0-9_-]+\.(png|webp)$/;
 
-export type CustomDecor = { label: string; src: string; height: number; aspect: number; base: [number, number] };
+export type CustomDecor = { label: string; src: string; height: number; aspect: number; base: [number, number]; frame?: true };
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || fallback);
 const round = (v: number, places: number) => Math.round(v * 10 ** places) / 10 ** places;
@@ -64,7 +76,7 @@ export function customDecor(raw: any): CustomDecor | undefined {
   const b = Array.isArray(raw.base) ? raw.base.map((x: unknown) => num(x, NaN)) : [];
   const base: [number, number] = b.length === 2 && b[0] >= 0 && b[1] <= 1 && b[0] < b[1] ? [round(b[0], 3), round(b[1], 3)] : [0.1, 0.9];
   const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim().slice(0, 40) : CUSTOM_LABEL;
-  return { label, src: raw.src, height, aspect, base };
+  return { label, src: raw.src, height, aspect, base, ...(raw.frame === true ? { frame: true as const } : {}) };
 }
 
 // What to draw for any decoration on the shelf, built-in or your own.
