@@ -29,7 +29,7 @@ interface Props {
 
 export const SLOT_COUNT = 48;
 
-// Imported books get a "Check" badge in the editor until you open them, so you
+// Imported books get a "New" badge in the editor until you open them, so you
 // remember to look over their blurbs. Kept on this device only; a badge you
 // never act on fades out after a few editor sessions.
 const REVIEW_KEY = 'bookshelf.toReview';
@@ -1370,10 +1370,10 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               {book ? (
                 <>
                   {!shareMode && book.id in toReview && (
-                    <div title="Imported: check the blurb" style={{
+                    <div title="Just imported: open it to look over the blurb" style={{
                       position: 'absolute', top: 4, right: 4, zIndex: 2, fontSize: '0.62rem', fontWeight: 600,
                       color: '#fff', background: '#d97706', padding: '3px 7px', borderRadius: 999, pointerEvents: 'none',
-                    }}>Check</div>
+                    }}>New</div>
                   )}
                   {shareMode ? (
                     <div aria-label={selectedForShare.has(i) ? 'Picked' : 'Not picked'} style={{
@@ -1526,7 +1526,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
               return n;
             });
             setImportOpen(false);
-            showToast(`Added ${books.length} ${books.length === 1 ? 'book' : 'books'} from Goodreads. Tap each one marked Check to look over its blurb.`);
+            showToast(`Added ${books.length} ${books.length === 1 ? 'book' : 'books'} from Goodreads. Tap each one marked New to look over its blurb.`);
           }}
         />
       )}
