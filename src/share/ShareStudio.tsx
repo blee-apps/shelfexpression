@@ -6,7 +6,7 @@ import { zipSync } from 'fflate';
 import { isDecor, WEAR, type Book } from '../books';
 import { wornCover, isWear, WEAR_OPTIONS, type Wear } from '../wear';
 import { decorDefOf } from '../decor';
-import { renderShare, morphShare, coverColor, setSharePhoto, hasSharePhoto, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
+import { renderShare, morphShare, coverColor, setSharePhoto, hasSharePhoto, panPhoto, SIZES, DEFAULT_OPTIONS, ShareOptions, ShareBook, ShareLayout, ShareBg, ShareSize } from './render';
 import AddForShare, { isTemp } from './AddForShare';
 
 const MAX_ITEMS = 12;
@@ -97,10 +97,39 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     if (!file) return;
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => { setSharePhoto(img); set('photoKey', Date.now()); set('bg', 'photo'); };
+    img.onload = () => { setSharePhoto(img); setMany({ photoKey: Date.now(), bg: 'photo', photoX: 0.5, photoY: 0.5, photoZoom: 100 }); };
     img.onerror = () => { URL.revokeObjectURL(url); toast("That photo couldn't be opened."); };
     img.src = url;
   };
+
+  const setMany = (patch: Partial<ShareOptions>) =>
+    setOpts(prev => {
+      const next = { ...prev, ...patch };
+      const { heading: _h, footer: _f, ...keep } = next;
+      try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(keep)); } catch {}
+      return next;
+    });
+
+  // Dragging the preview moves your photo; a double tap centers it again.
+  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
+  const lastTap = useRef(0);
+  const onPhotoDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Our own double tap, since phones don't reliably send double clicks.
+    const now = Date.now();
+    if (now - lastTap.current < 320) { lastTap.current = 0; setMany({ photoX: 0.5, photoY: 0.5 }); return; }
+    lastTap.current = now;
+    drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPhotoMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const k = e.currentTarget.width / e.currentTarget.getBoundingClientRect().width;
+    const dx = (e.clientX - d.x) * k, dy = (e.clientY - d.y) * k;
+    d.x = e.clientX; d.y = e.clientY;
+    setOpts(prev => ({ ...prev, ...panPhoto(prev, dx, dy) }));
+  };
+  const onPhotoUp = () => { if (drag.current) { drag.current = null; setMany({}); } };
 
   const set = <K extends keyof ShareOptions>(k: K, v: ShareOptions[K]) =>
     setOpts(prev => {
@@ -167,6 +196,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   const carouselOn = featureSet || (carousel.on && order.length > 1 && features.length > 0);
   const slideCount = featureSet ? features.length : carouselOn ? 1 + features.length : 1;
   const current = Math.min(slide, slideCount - 1);
+  const photoOn = photoOK && opts.bg === 'photo' && current === 0 && hasSharePhoto();
 
   const tintIndex = Math.max(0, order.findIndex(b => b.id === tintId));
   const tintBook = order[tintIndex];
@@ -373,7 +403,10 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
         <div className="share-preview" style={{ flex: '1 1 360px', display: 'flex', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', height: '100%', minHeight: 0, position: 'sticky', top: 0 }}>
           <div style={{ position: 'relative', lineHeight: 0 }}>
             <canvas ref={canvasRef} width={size.w} height={size.h}
-              style={{ maxWidth: '100%', maxHeight: 'min(74vh, 900px)', width: 'auto', height: 'auto', aspectRatio: `${size.w} / ${size.h}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', background: '#fff' }} />
+              {...(photoOn ? { onPointerDown: onPhotoDown, onPointerMove: onPhotoMove, onPointerUp: onPhotoUp, onPointerCancel: onPhotoUp,
+              } : {})}
+              style={{ maxWidth: '100%', maxHeight: 'min(74vh, 900px)', width: 'auto', height: 'auto', aspectRatio: `${size.w} / ${size.h}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', background: '#fff',
+                ...(photoOn ? { cursor: drag.current ? 'grabbing' : 'grab', touchAction: 'none' } : {}) }} />
             {busy && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#999', lineHeight: 1.4 }}>Loading covers…</div>}
             {!busy && !order.length && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#999', lineHeight: 1.4 }}>Add a book to begin</div>}
             {slideCount > 1 && (
@@ -506,9 +539,10 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </div>
             {photoOK && opts.bg === 'photo' && (
               <div style={{ marginTop: 12 }}>
+                <Slider label="Zoom" value={opts.photoZoom} min={100} max={300} onChange={v => set('photoZoom', v)} />
                 <Slider label="Blur" value={opts.photoBlur} min={0} max={100} onChange={v => set('photoBlur', v)} />
                 <Slider label="Brightness" value={opts.photoLight} min={-100} max={100} onChange={v => set('photoLight', v)} />
-                <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>Tap Photo again to pick another. Your photo stays on this device.</div>
+                <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>Drag the preview to position it; double-tap to center. Tap Photo again to pick another. Your photo stays on this device.</div>
               </div>
             )}
           </Section>

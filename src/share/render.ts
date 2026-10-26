@@ -23,6 +23,9 @@ export interface ShareOptions {
   photoBlur: number;          // 0 to 100, for bg 'photo' (grid only)
   photoLight: number;         // -100 (darker) to 100 (lighter)
   photoKey: number;           // changes when a new photo is picked
+  photoX: number;             // where the photo sits: 0 = left edge, 1 = right edge
+  photoY: number;             // 0 = top, 1 = bottom
+  photoZoom: number;          // 100 = just fills the frame
   footerOn: boolean;
   footer: string;
 }
@@ -47,7 +50,7 @@ export const SIZES: Record<ShareSize, { w: number; h: number; label: string; hin
 export const DEFAULT_OPTIONS: ShareOptions = {
   size: 'story', layout: 'grid', bg: 'paper', custom: '#3d4a5c', wear: 'off', align: 'center',
   synopsis: false, titles: false, heading: '', headingFont: 'serif',
-  photoBlur: 40, photoLight: -20, photoKey: 0, footerOn: true, footer: '',
+  photoBlur: 40, photoLight: -20, photoKey: 0, photoX: 0.5, photoY: 0.5, photoZoom: 100, footerOn: true, footer: '',
 };
 
 const SERIF = '"DM Serif Text", Georgia, serif';
@@ -69,20 +72,39 @@ let photoCache: { key: string; canvas: HTMLCanvasElement; lum: number; lumAt: (x
 
 // The photo cropped to fill the frame, softened and lightened or darkened.
 // Blur is done by shrinking and enlarging, which every browser supports.
-function processedPhoto(img: HTMLImageElement, W: number, H: number, blur: number, light: number) {
-  const key = [img.src.length, img.naturalWidth, W, H, blur, light].join('|');
+// The photo's size and place in the frame, from your zoom and position.
+function photoRect(img: HTMLImageElement, W: number, H: number, o: ShareOptions) {
+  const s = Math.max(W / img.naturalWidth, H / img.naturalHeight) * Math.max(1, o.photoZoom / 100);
+  const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+  return { dw, dh, x: (W - dw) * o.photoX, y: (H - dh) * o.photoY };
+}
+
+/** Dragging the preview by (dx, dy) canvas pixels: the new photo position. */
+export function panPhoto(o: ShareOptions, dx: number, dy: number): { photoX: number; photoY: number } {
+  if (!sharePhoto) return { photoX: o.photoX, photoY: o.photoY };
+  const { w: W, h: H } = SIZES[o.size];
+  const r = photoRect(sharePhoto, W, H, o);
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  return {
+    photoX: r.dw - W > 0.5 ? clamp(o.photoX - dx / (r.dw - W)) : 0.5,
+    photoY: r.dh - H > 0.5 ? clamp(o.photoY - dy / (r.dh - H)) : 0.5,
+  };
+}
+
+function processedPhoto(img: HTMLImageElement, W: number, H: number, o: ShareOptions) {
+  const blur = o.photoBlur, light = o.photoLight;
+  const key = [img.src.length, img.naturalWidth, W, H, blur, light, o.photoX.toFixed(4), o.photoY.toFixed(4), o.photoZoom].join('|');
   if (photoCache && photoCache.key === key) return photoCache;
   const out = document.createElement('canvas'); out.width = W; out.height = H;
   const c = out.getContext('2d')!;
-  const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
-  const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+  const { dw, dh, x: px, y: py } = photoRect(img, W, H, o);
   const factor = 1 + (blur / 100) * 39;  // up to 40x smaller
-  if (factor <= 1.05) c.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  if (factor <= 1.05) c.drawImage(img, px, py, dw, dh);
   else {
     // Halve step by step for a smooth blur without blocky edges.
     let cur: HTMLCanvasElement = document.createElement('canvas');
     cur.width = W; cur.height = H;
-    cur.getContext('2d')!.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    cur.getContext('2d')!.drawImage(img, px, py, dw, dh);
     let cw = W, ch = H;
     const tw = Math.max(4, Math.round(W / factor)), th = Math.max(4, Math.round(H / factor));
     while (cw > tw) {
@@ -177,7 +199,7 @@ const hexToRgb = (h: string): [number, number, number] | null => {
 function palette(o: ShareOptions, tint: [number, number, number] | null, layout: ShareLayout): Palette {
   if (o.bg === 'photo' && sharePhoto && layout === 'grid') {
     const { w, h } = SIZES[o.size];
-    const ph = processedPhoto(sharePhoto, w, h, o.photoBlur, o.photoLight);
+    const ph = processedPhoto(sharePhoto, w, h, o);
     const light = ph.lum > 0.55;
     return {
       bg: light ? '#e8e4dd' : '#222',
