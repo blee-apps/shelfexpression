@@ -145,11 +145,15 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   }));
   // Carousel slides: the main image, then a feature for each book in it.
   const features = order.filter(b => !isDecor(b));
-  const carouselOn = carousel.on && order.length > 1 && features.length > 0;
-  const slideCount = carouselOn ? 1 + features.length : 1;
-  const current = Math.min(slide, slideCount - 1);
   const single = order.length === 1;
-  const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' ? 'grid' : opts.layout;
+  // One book in a grid is a feature. Feature with several books is a set of
+  // features, one slide per book (decorations left out); with only
+  // decorations it falls back to a grid.
+  const layout: ShareLayout = single && opts.layout === 'grid' ? 'feature' : !single && opts.layout === 'feature' && !features.length ? 'grid' : opts.layout;
+  const featureSet = layout === 'feature' && !single;
+  const carouselOn = featureSet || (carousel.on && order.length > 1 && features.length > 0);
+  const slideCount = featureSet ? features.length : carouselOn ? 1 + features.length : 1;
+  const current = Math.min(slide, slideCount - 1);
 
   const tintIndex = Math.max(0, order.findIndex(b => b.id === tintId));
   const tintBook = order[tintIndex];
@@ -169,7 +173,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
     const canvas = canvasRef.current;
     const tint = opts.bg === 'cover' ? coverColor(tintImg) : null;
     const next = { ...opts, layout, footer };
-    if (current > 0) {
+    if (featureSet || current > 0) {
       // A feature slide: drawn straight away (no glide).
       stopMorph.current?.();
       stopMorph.current = null;
@@ -207,6 +211,16 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
   // What slide i shows: 0 is the main image, then one feature per book.
   function slideAt(i: number): { books: ShareBook[]; opts: ShareOptions; tint: [number, number, number] | null } {
     const main = { ...opts, layout, footer };
+    if (featureSet) {
+      // Every slide is a feature with the main options. The heading goes on
+      // the first; Cover takes each book's own color.
+      const sb = shareBooks[order.indexOf(features[i])];
+      return {
+        books: [sb],
+        opts: { ...main, layout: 'feature', heading: i === 0 ? opts.heading : '' },
+        tint: opts.bg === 'cover' ? coverColor(sb.img) : null,
+      };
+    }
     const mainTint = opts.bg === 'cover' ? coverColor(tintImg) : null;
     if (i === 0) return { books: shareBooks, opts: main, tint: mainTint };
     const b = features[i - 1];
@@ -405,15 +419,17 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
           </Section>
 
           <Section label="Layout">
-            <Segmented value={layout} onChange={v => set('layout', v as ShareLayout)}
+            <Segmented value={layout} onChange={v => { set('layout', v as ShareLayout); setSlide(0); }}
               items={[
                 { value: 'grid', label: 'Grid', disabled: single },
                 { value: 'shelf', label: 'Vitsoe' },
                 { value: 'billy', label: 'Billy' },
-                { value: 'feature', label: 'Feature', disabled: !single },
+                { value: 'feature', label: 'Feature', disabled: !features.length },
               ]} />
             <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>
-              {single ? 'Feature shows one book with its details.' : 'Feature is for a single book.'}
+              {single ? 'Feature shows one book with its details.'
+                : featureSet ? `Each book gets its own slide, ${slideCount} in all.${features.length < order.length ? ' Decorations are left out.' : ''}`
+                : 'Feature gives each book a slide of its own.'}
             </div>
           </Section>
 
@@ -434,9 +450,9 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </Section>
           )}
 
-          <Section label="Background" hint={carouselOn ? 'First image' : undefined}>
+          <Section label="Background" hint={featureSet ? 'Every image' : carouselOn ? 'First image' : undefined}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              {([['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark'], ['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', 'Cover']] as [ShareBg, string, string][]).map(([v, color, label]) => (
+              {([['paper', '#f3eee6', 'Paper'], ['white', '#ffffff', 'White'], ['dark', '#151515', 'Dark'], ['cover', 'conic-gradient(#d9a441, #b5523b, #3f6e8c, #6b8f5a, #d9a441)', featureSet ? 'Each cover' : 'Cover']] as [ShareBg, string, string][]).map(([v, color, label]) => (
                 <button key={v} onClick={() => set('bg', v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', textAlign: 'center' }}>
                   <div style={{ width: 44, height: 44, borderRadius: 22, background: color, border: '1px solid #ddd', outline: opts.bg === v ? '2px solid #1a1a1a' : 'none', outlineOffset: 2 }} />
                   <div style={{ fontSize: 11, color: opts.bg === v ? '#1a1a1a' : '#888', marginTop: 5 }}>{label}</div>
@@ -450,7 +466,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                   onChange={e => { set('custom', e.target.value); set('bg', 'custom'); }}
                   style={{ position: 'absolute', top: 0, left: 0, width: 44, height: 44, opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
               </label>
-              {opts.bg === 'cover' && order.length > 1 && (
+              {opts.bg === 'cover' && order.length > 1 && !featureSet && (
                 // Pages through the chosen books to pick which cover sets the color.
                 <div className="share-tint-picker" style={{ display: 'flex', alignItems: 'center', height: 44, marginLeft: 4 }}>
                   <TintArrow dir={-1} onClick={() => stepTint(-1)} />
@@ -463,7 +479,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </div>
           </Section>
 
-          {order.length > 1 && features.length > 0 && (
+          {order.length > 1 && features.length > 0 && !featureSet && (
             <Section label="Carousel" hint={carouselOn ? `${slideCount} images` : undefined}>
               <Toggle label="Add a slide for each book" checked={carousel.on} onChange={v => { setCarousel({ on: v }); setSlide(0); }} />
               {carouselOn && (
@@ -498,7 +514,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
             </Section>
           )}
 
-          <Section label="Heading" hint="Optional">
+          <Section label="Heading" hint={featureSet ? 'Optional, on the first image' : 'Optional'}>
             <input value={opts.heading} onChange={e => setOpts(o => ({ ...o, heading: e.target.value }))}
               placeholder="e.g. My favorite books of 2026" style={input} />
           </Section>
