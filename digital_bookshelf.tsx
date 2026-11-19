@@ -359,6 +359,7 @@ const AthenaeumStructure = ({ gridRef, animState }: { gridRef: React.RefObject<H
   return (
     <div className="lib" style={style} aria-hidden="true">
       <div className="lib-cornice" />
+      <div className="lib-top" style={{ height: board }}><div className="lib-fringe" /></div>
       {rows.map((_, i) => {
         const top = i === 0 ? board : shelfTops[i - 1] + surface + board;
         return <div key={`c-${i}`} className="lib-row" style={{ top, height: shelfTops[i] - top }}>
@@ -1277,6 +1278,8 @@ export default function App() {
             linear-gradient(to bottom, #24140b 0, #3a2214 var(--surface), var(--wood-hi) var(--surface), var(--wood) 100%);
           box-shadow: 0 10px 14px -8px rgba(0,0,0,0.6);
         }
+        /* The top board's edge, so the top row gets its leather too */
+        .lib-top { position: absolute; top: 0; left: var(--side); right: var(--side); z-index: 1; }
         /* Leather dust edging: a scalloped strip tooled with a gold line */
         .lib-fringe {
           position: absolute; left: 0; right: 0; top: 100%; height: 10px;

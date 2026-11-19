@@ -789,14 +789,8 @@ function drawAthenaeum(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Pal
     }
   }
 
-  // Shelves: dark top surface, a lit front edge with a bead, then the leather.
-  shelfTops.forEach((t, i) => {
-    const base = i === shelfTops.length - 1;
-    vgrad(ctx, ix, t, iw, SURFACE, [[0, '#1a0e07'], [1, '#3a2214']]);
-    wood(ctx, ix, t + SURFACE, iw, BOARD, C.hi, 'h');
-    vgrad(ctx, ix, t + SURFACE, iw, BOARD, [[0, 'rgba(255,215,170,0.22)'], [0.1, 'rgba(0,0,0,0)'], [0.42, 'rgba(255,215,170,0.12)'], [0.52, 'rgba(0,0,0,0.35)'], [0.6, 'rgba(0,0,0,0.05)'], [0.9, 'rgba(0,0,0,0.15)'], [1, 'rgba(0,0,0,0.5)']]);
-    if (base) return;
-    const fy = t + SURFACE + BOARD;
+  // Leather dust edging hanging from a board's front edge at fy.
+  const fringe = (fy: number) => {
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
     ctx.fillStyle = LEATHER;
@@ -814,7 +808,17 @@ function drawAthenaeum(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Pal
     ctx.restore();
     vgrad(ctx, ix, fy, iw, FRINGE, [[0, 'rgba(255,255,255,0.10)'], [0.6, 'rgba(255,255,255,0)']]);
     ctx.fillStyle = GOLD; ctx.fillRect(ix, fy + 3, iw, 1.5);
+  };
+
+  // Shelves: dark top surface, a lit front edge with a bead, then the leather.
+  shelfTops.forEach((t, i) => {
+    const base = i === shelfTops.length - 1;
+    vgrad(ctx, ix, t, iw, SURFACE, [[0, '#1a0e07'], [1, '#3a2214']]);
+    wood(ctx, ix, t + SURFACE, iw, BOARD, C.hi, 'h');
+    vgrad(ctx, ix, t + SURFACE, iw, BOARD, [[0, 'rgba(255,215,170,0.22)'], [0.1, 'rgba(0,0,0,0)'], [0.42, 'rgba(255,215,170,0.12)'], [0.52, 'rgba(0,0,0,0.35)'], [0.6, 'rgba(0,0,0,0.05)'], [0.9, 'rgba(0,0,0,0.15)'], [1, 'rgba(0,0,0,0.5)']]);
+    if (!base) fringe(t + SURFACE + BOARD);
   });
+  fringe(y0 + BOARD); // the top board's edge, over the top row
 
   // Plinth: an ogee cap with a gold bead, a raised band, and the floor line.
   const py = shelfTops[shelfTops.length - 1] + SURFACE + BOARD;
