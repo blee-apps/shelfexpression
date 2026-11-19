@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useSyncExternalStore, lazy, Suspense } from 'react';
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { Book, BOOKS, SHELF_ITEMS, MANUAL_ITEMS, USE_VITSOE_SHELF, SHELF_STYLE, COLOR_MODE, WEAR, isDecor } from './src/books';
+import { Book, BOOKS, SHELF_ITEMS, MANUAL_ITEMS, USE_VITSOE_SHELF, BAY_SHELF, SHELF_STYLE, COLOR_MODE, WEAR, isDecor } from './src/books';
 import { wearArt, wearLevel, type WearArt } from './src/wear';
 import { decorDefOf, BOOK_ASPECT, DecorDef } from './src/decor';
 import { SITE, coverInfo, EDITOR_AVAILABLE } from './src/shelfData';
@@ -337,6 +337,41 @@ const BillyStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLD
   );
 };
 
+
+// --- ATHENAEUM (a Georgian library bookcase in dark walnut, purely decorative) ---
+// Same bays and pairs as Billy, dressed up: a crown cornice with dentils,
+// fluted pilasters between the bays, shelves with a beaded front edge and a
+// scalloped leather dust edging tooled in gold, and a molded plinth.
+// Everything is CSS gradients plus an SVG noise filter for the grain.
+const AthenaeumStructure = ({ gridRef, animState }: { gridRef: React.RefObject<HTMLDivElement | null>; animState: string }) => {
+  const { rows, gridOffsetTop } = useShelfRows(gridRef, animState);
+  if (rows.length === 0) return null;
+  const PAD = 24;
+  const rowH = rows[0].bottom - rows[0].top;
+  const board = Math.round(Math.min(24, Math.max(12, rowH * 0.085)));
+  const plinth = Math.round(Math.min(78, Math.max(36, rowH * 0.3)));
+  const cornice = Math.round(Math.min(70, Math.max(34, rowH * 0.26)));
+  const surface = Math.round(board * 1.1);
+  const shelfTops = rows.map(r => r.bottom + PAD - Math.round(surface * 0.55));
+  const last = shelfTops[shelfTops.length - 1];
+  const height = last + surface + board + plinth;
+  const style = { top: gridOffsetTop - PAD, left: -PAD, right: -PAD, height, '--board': `${board}px`, '--surface': `${surface}px`, '--cornice': `${cornice}px` } as React.CSSProperties;
+  return (
+    <div className="lib" style={style} aria-hidden="true">
+      <div className="lib-cornice" />
+      {rows.map((_, i) => {
+        const top = i === 0 ? board : shelfTops[i - 1] + surface + board;
+        return <div key={`c-${i}`} className="lib-row" style={{ top, height: shelfTops[i] - top }}>
+          <div className="lib-bay" /><div className="lib-bay lib-bay-b" />
+        </div>;
+      })}
+      {shelfTops.map((t, i) => <div key={`s-${i}`} className={`lib-shelf${i === shelfTops.length - 1 ? ' lib-base' : ''}`} style={{ top: t }}>{i < shelfTops.length - 1 && <div className="lib-fringe" />}</div>)}
+      <div className="lib-mid" style={{ height: last + surface }} />
+      <div className="lib-plinth" style={{ top: last + surface + board, height: plinth }} />
+    </div>
+  );
+};
+
 // --- SHELF STRUCTURE (Vitsoe 606-style, purely decorative) ---
 
 // Measures the books grid rows and the grid's own offsetTop from its parent
@@ -534,7 +569,7 @@ const ShelfSlot = ({ book, col, children }: { book: Book; col?: number; children
   const aspect = useBookAspectRatio(book);
   const fit = Math.min(1, aspect / BOOK_ASPECT);
   return (
-    <div className="vitsoe-slot" style={SHELF_STYLE === 'billy' ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center', position: 'relative', left: col === undefined ? 0 : `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%` } : { aspectRatio: BOOK_ASPECT }}>
+    <div className="vitsoe-slot" style={BAY_SHELF ? { aspectRatio: BOOK_ASPECT, width: `${BILLY_SCALE * 100}%`, justifySelf: 'center', position: 'relative', left: col === undefined ? 0 : `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%` } : { aspectRatio: BOOK_ASPECT }}>
       {children(`${(fit * 100).toFixed(3)}%`)}
     </div>
   );
@@ -1099,7 +1134,7 @@ export default function App() {
     for (const item of SHELF_ITEMS) {
       const def = isDecor(item) ? decorDefOf(item) : undefined;
       if (isDecor(item) && !def) continue;
-      const bookW = slot.w * (SHELF_STYLE === 'billy' ? BILLY_SCALE : 1);
+      const bookW = slot.w * (BAY_SHELF ? BILLY_SCALE : 1);
       const height = def ? (bookW / BOOK_ASPECT) * def.height : 0;
       const span = def && slot.w > 0 && height * def.aspect > slot.w && cols >= 2 ? 2 : 1;
       const style: React.CSSProperties = {};
@@ -1109,7 +1144,7 @@ export default function App() {
         else style.gridColumn = 'span 2';
       }
       colOf[item.id] = col;
-      if (def && span === 1 && SHELF_STYLE === 'billy') { style.position = 'relative'; style.left = `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%`; }
+      if (def && span === 1 && BAY_SHELF) { style.position = 'relative'; style.left = `${col % 2 ? -BILLY_NUDGE : BILLY_NUDGE}%`; }
       if (def) decorEls[item.id] = <DecorOnShelf key={item.id} def={def} height={height} slotHeight={bookW / BOOK_ASPECT} slotStyle={style} />;
       col = (col + span) % cols;
     }
@@ -1187,6 +1222,90 @@ export default function App() {
         .dark .billy { --front: #3a332e; --edge: #241f1b; --top-back: #2a2521; --top-front: #362f2a; --back: #1e1b18; --wall-in: #2b2622; --hole: rgba(0,0,0,0.75);
           box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 40px -28px rgba(0,0,0,0.8); }
         .dark .billy-shelf { background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0, var(--top-back) 1px, var(--top-front) var(--surface), #4a423b var(--surface), var(--front) calc(var(--surface) + 2px), var(--front) calc(100% - 2px), var(--edge) 100%); }
+
+        /* ── Athenaeum: Georgian library bookcase in dark walnut ─────────────────── */
+        .lib {
+          position: absolute; pointer-events: none; z-index: 0;
+          --wood: #4a2c1a; --wood-hi: #6b4129; --wood-lo: #2e1a0f; --back: #2a170d; --gold: #c9a45c; --leather: #0f3d26;
+          --grain-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.18' numOctaves='3' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.04 0 0 0 0 0.02 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); --grain-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='600'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.18 0.006' numOctaves='3' seed='9'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.04 0 0 0 0 0.02 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+          --side: 22px;
+          background: var(--grain-v), linear-gradient(to right, var(--wood-lo), var(--wood) 6px, var(--wood-hi) 50%, var(--wood) calc(100% - 6px), var(--wood-lo));
+          box-shadow: 0 40px 50px -30px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.25);
+        }
+        /* Fluted pilasters down each side */
+        .lib::before, .lib::after {
+          content: ''; position: absolute; top: var(--board); bottom: 0; width: calc(var(--side) - 8px); z-index: 2;
+          background: repeating-linear-gradient(to right, rgba(0,0,0,0.38) 0 1px, rgba(255,220,180,0.10) 1px 2px, transparent 2px 4px, rgba(0,0,0,0.22) 4px 5px);
+          border-left: 1px solid rgba(255,220,180,0.12); border-right: 1px solid rgba(0,0,0,0.4);
+        }
+        .lib::before { left: 4px; } .lib::after { right: 4px; }
+        .lib-cornice {
+          position: absolute; left: -12px; right: -12px; top: calc(var(--cornice) * -1); height: var(--cornice); z-index: 3;
+          background:
+            /* crown: a projecting cap, a cove, a dentil course, then a bead */
+            linear-gradient(to bottom, var(--wood-hi) 0, var(--wood) 14%, var(--wood-lo) 18%, transparent 18%),
+            linear-gradient(to bottom, transparent 18%, #1f110a 18%, var(--wood-hi) 46%, transparent 46%),
+            linear-gradient(to bottom, transparent 46%, rgba(0,0,0,0.35) 46%, transparent 48%, transparent 70%, rgba(0,0,0,0.5) 70%, transparent 72%),
+            repeating-linear-gradient(to right, #1a0e07 0 2px, var(--wood-hi) 2px 4px, var(--wood) 4px 11px, #3a2214 11px 12px, #1a0e07 12px 17px) 0 50% / 100% 24% no-repeat,
+            linear-gradient(to bottom, transparent 74%, var(--gold) 74%, #8a6a30 78%, transparent 78%),
+            linear-gradient(to bottom, transparent 78%, var(--wood-hi) 80%, var(--wood-lo) 100%),
+            var(--grain-h);
+          background-color: var(--wood);
+          box-shadow: 0 6px 10px -4px rgba(0,0,0,0.5);
+          border-radius: 2px 2px 0 0;
+        }
+        .lib-row { position: absolute; left: var(--side); right: var(--side); display: flex; gap: calc(var(--side) * 2 + 4px); }
+        @media (max-width: 767px) { .lib { left: 6px !important; right: 6px !important; --side: 16px; } .lib-bay-b { display: none; } .lib-cornice { left: -6px; right: -6px; } }
+        .lib-bay {
+          flex: 1; position: relative;
+          background:
+            linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.25) 22px, rgba(0,0,0,0.08) 70px, rgba(0,0,0,0) 55%),
+            linear-gradient(to top, rgba(0,0,0,0.25), rgba(0,0,0,0) 30px),
+            /* tongue-and-groove boards on the back */
+            repeating-linear-gradient(to right, transparent 0 78px, rgba(0,0,0,0.5) 78px 79px, rgba(255,210,170,0.06) 79px 80px),
+            linear-gradient(rgba(42,23,13,0.62), rgba(42,23,13,0.62)),
+            var(--grain-v),
+            linear-gradient(to right, rgba(0,0,0,0.35), rgba(0,0,0,0) 14px, rgba(0,0,0,0) calc(100% - 14px), rgba(0,0,0,0.35)),
+            var(--back);
+          box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+        }
+        .lib-shelf {
+          position: absolute; left: var(--side); right: var(--side); height: calc(var(--surface) + var(--board)); z-index: 1;
+          background:
+            linear-gradient(to bottom, rgba(0,0,0,0.5) 0, transparent 2px, transparent var(--surface), rgba(255,215,170,0.22) var(--surface), transparent calc(var(--surface) + 2px), transparent calc(var(--surface) + 40%), rgba(255,215,170,0.12) calc(var(--surface) + 45%), rgba(0,0,0,0.35) calc(var(--surface) + 52%), transparent calc(var(--surface) + 58%), transparent calc(100% - 2px), rgba(0,0,0,0.5) 100%),
+            var(--grain-h),
+            linear-gradient(to bottom, #24140b 0, #3a2214 var(--surface), var(--wood-hi) var(--surface), var(--wood) 100%);
+          box-shadow: 0 10px 14px -8px rgba(0,0,0,0.6);
+        }
+        /* Leather dust edging: a scalloped strip tooled with a gold line */
+        .lib-fringe {
+          position: absolute; left: 0; right: 0; top: 100%; height: 10px;
+          background: linear-gradient(to bottom, transparent 2px, var(--gold) 2px, var(--gold) 3px, transparent 3px), linear-gradient(to bottom, rgba(255,255,255,0.10), rgba(255,255,255,0) 60%), var(--leather);
+          -webkit-mask: radial-gradient(circle at 7px 2px, #000 6.5px, transparent 7px) 0 0 / 14px 100% repeat-x, linear-gradient(#000, #000) 0 0 / 100% 3px no-repeat;
+                  mask: radial-gradient(circle at 7px 2px, #000 6.5px, transparent 7px) 0 0 / 14px 100% repeat-x, linear-gradient(#000, #000) 0 0 / 100% 3px no-repeat;
+          filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
+        }
+        .lib-mid { display: none; }
+        @media (min-width: 768px) {
+          .lib-mid {
+            display: block; position: absolute; top: var(--board); left: calc(50% - var(--side) - 2px); width: calc(var(--side) * 2 + 4px); z-index: 2;
+            background:
+              repeating-linear-gradient(to right, transparent 0 6px, rgba(0,0,0,0.38) 6px 7px, rgba(255,220,180,0.10) 7px 8px, transparent 8px 10px, rgba(0,0,0,0.22) 10px 11px) 50% 0 / 60% 100% no-repeat,
+              linear-gradient(to right, rgba(0,0,0,0.45), transparent 3px, transparent calc(100% - 3px), rgba(0,0,0,0.45)),
+              var(--grain-v), var(--wood);
+          }
+        }
+        .lib-plinth {
+          position: absolute; left: -6px; right: -6px; z-index: 3;
+          background:
+            /* ogee cap, a gold bead, a raised panel band, then the floor shadow */
+            linear-gradient(to bottom, rgba(0,0,0,0.55) 0, var(--wood-hi) 10%, var(--wood-lo) 22%, var(--gold) 22%, #8a6a30 25%, var(--wood-lo) 25%, var(--wood) 32%, transparent 32%),
+            linear-gradient(to bottom, transparent 40%, rgba(255,215,170,0.15) 40%, transparent 42%, transparent 84%, rgba(0,0,0,0.45) 84%, rgba(0,0,0,0.2) 90%, var(--wood-lo) 100%),
+            var(--grain-h), var(--wood);
+          box-shadow: 0 18px 20px -12px rgba(0,0,0,0.6);
+          border-radius: 0 0 2px 2px;
+        }
+        .dark .lib { --wood: #3b2214; --wood-hi: #573420; --wood-lo: #22130a; --back: #1d0f08; }
 
         /* ── Vitsoe 606-style shelf system ───────────────────────────────── */
 
@@ -1435,9 +1554,10 @@ export default function App() {
           {/* Wall + shelf structure layer (purely decorative, pointer-events-none) */}
           {SHELF_STYLE === 'vitsoe' && <ShelfStructure gridRef={gridRef} animState={animState} />}
           {SHELF_STYLE === 'billy' && <BillyStructure gridRef={gridRef} animState={animState} />}
+          {SHELF_STYLE === 'athenaeum' && <AthenaeumStructure gridRef={gridRef} animState={animState} />}
 
           {/* Books grid — untouched logic, added px/gap-y for shelf breathing room */}
-          <div ref={gridRef} className={SHELF_STYLE === 'billy' ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 pt-8 md:pt-12 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4 }}>
+          <div ref={gridRef} className={BAY_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-12 md:gap-y-20 items-end px-6 md:px-0 pt-8 md:pt-12 w-full relative" : USE_VITSOE_SHELF ? "grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-14 md:gap-x-6 md:gap-y-20 items-end px-4 md:px-8 pt-8 md:pt-12 w-full relative" : "grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 items-center w-full relative"} style={{ zIndex: 4, ...(SHELF_STYLE === 'athenaeum' ? { marginTop: 'clamp(44px, 6vw, 76px)' } : {}) }}>
             {SHELF_ITEMS.map((book) => {
               if (isDecor(book)) return decorEls[book.id] ?? null;
               const isHidden = selectedBook?.id === book.id && animState !== 'idle' && !closingFade;

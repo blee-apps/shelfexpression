@@ -470,6 +470,7 @@ export default function ShareStudio({ books, loadCover, footer, onFooterChange, 
                 { value: 'grid', label: 'Grid', disabled: single },
                 { value: 'shelf', label: 'Vitsoe' },
                 { value: 'billy', label: 'Billy' },
+                { value: 'athenaeum', label: 'Athenaeum' },
                 { value: 'feature', label: 'Feature', disabled: !features.length },
               ]} />
             <div style={{ fontSize: 12, color: '#999', marginTop: 6, lineHeight: 1.4 }}>
