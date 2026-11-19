@@ -7,7 +7,7 @@ import { fillPhoto, panFill } from '../photoFill';
 
 export type ShareSize = 'story' | 'post' | 'square';
 // 'shelf' is the Vitsoe 606 (its saved name from before Billy).
-export type ShareLayout = 'grid' | 'shelf' | 'billy' | 'feature';
+export type ShareLayout = 'grid' | 'shelf' | 'billy' | 'athenaeum' | 'feature';
 export type ShareBg = 'paper' | 'white' | 'dark' | 'cover' | 'custom' | 'photo';
 
 export interface ShareOptions {
@@ -427,6 +427,7 @@ export function renderShare(canvas: HTMLCanvasElement, books: ShareBook[], o: Sh
   if (layout === 'feature') drawFeature(ctx, books[0], o, p, box, W);
   else if (layout === 'shelf') drawShelf(ctx, books, p, box, W, H);
   else if (layout === 'billy') drawBilly(ctx, books, p, box, W);
+  else if (layout === 'athenaeum') drawAthenaeum(ctx, books, p, box, W);
   else drawGrid(ctx, books, o, p, box);
   ctx.textAlign = 'left';
 }
@@ -666,6 +667,186 @@ function drawBilly(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette
     for (const it of placeRow(books, row, L, inner.x, inner.w, y, gap)) {
       if (it.b.decor) { drawDecor(ctx, it.b, it.x, it.y, it.w, it.h, p, true); continue; }
       drawStanding(ctx, it.b.img, it.x, it.y, it.w, it.h, dark);
+    }
+  });
+}
+
+// Walnut grain: thin, slightly wavy streaks, drawn once and tiled. Horizontal
+// for shelves and moldings, vertical for posts and the back.
+const grainCache: Partial<Record<'h' | 'v', HTMLCanvasElement>> = {};
+function grain(dir: 'h' | 'v'): HTMLCanvasElement {
+  const hit = grainCache[dir];
+  if (hit) return hit;
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  let seed = dir === 'h' ? 7 : 13;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 220; i++) {
+    const y = rnd() * S, amp = 1 + rnd() * 4, len = 0.004 + rnd() * 0.01, ph = rnd() * 6.28;
+    g.strokeStyle = rnd() < 0.75 ? `rgba(20,10,4,${0.08 + rnd() * 0.22})` : `rgba(255,215,170,${0.03 + rnd() * 0.06})`;
+    g.lineWidth = 0.6 + rnd() * 1.8;
+    g.beginPath();
+    for (let x = -4; x <= S + 4; x += 8) {
+      const yy = y + Math.sin(x * len * 6.28 + ph) * amp;
+      x < 0 ? g.moveTo(x, yy) : g.lineTo(x, yy);
+    }
+    g.stroke();
+  }
+  let out = c;
+  if (dir === 'v') {
+    out = document.createElement('canvas');
+    out.width = out.height = S;
+    const o = out.getContext('2d')!;
+    o.translate(S / 2, S / 2); o.rotate(Math.PI / 2); o.drawImage(c, -S / 2, -S / 2);
+  }
+  grainCache[dir] = out;
+  return out;
+}
+function wood(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, dir: 'h' | 'v') {
+  if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+  const pat = ctx.createPattern(grain(dir), 'repeat');
+  if (!pat) return;
+  ctx.save();
+  pat.setTransform?.(new DOMMatrix().translate(x * 0.37, y * 0.61));
+  ctx.fillStyle = pat;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+function vgrad(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, stops: [number, string][]) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  stops.forEach(([o, c]) => g.addColorStop(Math.max(0, Math.min(1, o)), c));
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawAthenaeum(ctx: CanvasRenderingContext2D, books: ShareBook[], p: Palette, box: Box, W: number) {
+  // A Georgian library bookcase in dark walnut, matching the site: a crown
+  // cornice with dentils and a gold bead, fluted posts, a boarded back, shelves
+  // with forest green leather dust edging, and a molded plinth. One bay.
+  const dark = p.dark;
+  const C = dark
+    ? { wood: '#3b2214', hi: '#573420', lo: '#22130a', back: '#1d0f08' }
+    : { wood: '#4a2c1a', hi: '#6b4129', lo: '#2e1a0f', back: '#2a170d' };
+  const GOLD = '#c9a45c', GOLD_LO = '#8a6a30', LEATHER = '#0f3d26';
+  const SIDE = 40, BOARD = 22, SURFACE = 22, PLINTH = 70, CORNICE = 74, OVER = 16, HEAD = 46, FRINGE = 13;
+  const ox = box.x - 40, ow = W - ox * 2;
+  const ix = ox + SIDE, iw = ow - SIDE * 2;
+  const margin = 60;
+  const inner = { x: ix + margin, w: iw - margin * 2 };
+  const gap = 40;
+  const perRow = HEAD + SURFACE * 0.45 + BOARD;
+  const avail = box.h - CORNICE - BOARD - PLINTH;
+  const L = slotLayout(books, inner.w, avail, gap, 0, perRow, avail * 0.55);
+  const rowH = L.slotH + perRow;
+  const total = CORNICE + BOARD + rowH * L.rows.length + PLINTH;
+  const top0 = box.y + (box.h - total) / 2;   // top of the cornice
+  const y0 = top0 + CORNICE;                    // top of the carcass
+
+  // Carcass, with a soft shadow on the wall and floor.
+  const bodyH = total - CORNICE;
+  ctx.save();
+  ctx.shadowColor = `rgba(0,0,0,${dark ? 0.7 : 0.4})`;
+  ctx.shadowBlur = 50;
+  ctx.shadowOffsetY = 24;
+  ctx.fillStyle = C.wood;
+  ctx.fillRect(ox, y0, ow, bodyH);
+  ctx.restore();
+  wood(ctx, ox, y0, ow, bodyH, C.wood, 'v');
+
+  // Bays: boarded back, shadowed under each shelf and toward the sides.
+  const shelfTops: number[] = [];
+  L.rows.forEach((_, i) => {
+    const top = y0 + BOARD + rowH * i;
+    const shelf = top + HEAD + L.slotH - SURFACE * 0.55;
+    shelfTops.push(shelf);
+    const bh = shelf - top;
+    wood(ctx, ix, top, iw, bh, C.back, 'v');
+    ctx.fillStyle = 'rgba(42,23,13,0.55)';
+    ctx.fillRect(ix, top, iw, bh);
+    for (let bx = ix + 120; bx < ix + iw - 4; bx += 120) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, top, 1.5, bh);
+      ctx.fillStyle = 'rgba(255,210,170,0.06)'; ctx.fillRect(bx + 1.5, top, 1.5, bh);
+    }
+    vgrad(ctx, ix, top, iw, bh, [[0, 'rgba(0,0,0,0.6)'], [26 / bh, 'rgba(0,0,0,0.25)'], [80 / bh, 'rgba(0,0,0,0.08)'], [0.55, 'rgba(0,0,0,0)'], [1 - 34 / bh, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.25)']]);
+    const sg = ctx.createLinearGradient(ix, 0, ix + iw, 0);
+    sg.addColorStop(0, 'rgba(0,0,0,0.4)'); sg.addColorStop(18 / iw, 'rgba(0,0,0,0)');
+    sg.addColorStop(1 - 18 / iw, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = sg; ctx.fillRect(ix, top, iw, bh);
+  });
+
+  // Fluted posts down both sides.
+  const postTop = y0 + BOARD, postH = shelfTops[shelfTops.length - 1] + SURFACE + BOARD - postTop;
+  for (const px of [ox + 6, ox + ow - SIDE + 6]) {
+    const pw = SIDE - 12;
+    ctx.fillStyle = 'rgba(255,220,180,0.12)'; ctx.fillRect(px, postTop, 1, postH);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(px + pw - 1, postTop, 1, postH);
+    for (let fx = px + 4; fx < px + pw - 4; fx += 6) {
+      ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fillRect(fx, postTop + 6, 1.5, postH - 12);
+      ctx.fillStyle = 'rgba(255,220,180,0.10)'; ctx.fillRect(fx + 1.5, postTop + 6, 1.5, postH - 12);
+    }
+  }
+
+  // Shelves: dark top surface, a lit front edge with a bead, then the leather.
+  shelfTops.forEach((t, i) => {
+    const base = i === shelfTops.length - 1;
+    vgrad(ctx, ix, t, iw, SURFACE, [[0, '#1a0e07'], [1, '#3a2214']]);
+    wood(ctx, ix, t + SURFACE, iw, BOARD, C.hi, 'h');
+    vgrad(ctx, ix, t + SURFACE, iw, BOARD, [[0, 'rgba(255,215,170,0.22)'], [0.1, 'rgba(0,0,0,0)'], [0.42, 'rgba(255,215,170,0.12)'], [0.52, 'rgba(0,0,0,0.35)'], [0.6, 'rgba(0,0,0,0.05)'], [0.9, 'rgba(0,0,0,0.15)'], [1, 'rgba(0,0,0,0.5)']]);
+    if (base) return;
+    const fy = t + SURFACE + BOARD;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = LEATHER;
+    ctx.beginPath();
+    ctx.moveTo(ix, fy);
+    ctx.lineTo(ix + iw, fy);
+    const R = 9, n = Math.max(1, Math.round(iw / (R * 2))), step = iw / n;
+    for (let k = n - 1; k >= 0; k--) {
+      const cx = ix + step * (k + 0.5);
+      ctx.lineTo(cx + step / 2, fy + 4);
+      ctx.arc(cx, fy + 4, step / 2, 0, Math.PI);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    vgrad(ctx, ix, fy, iw, FRINGE, [[0, 'rgba(255,255,255,0.10)'], [0.6, 'rgba(255,255,255,0)']]);
+    ctx.fillStyle = GOLD; ctx.fillRect(ix, fy + 3, iw, 1.5);
+  });
+
+  // Plinth: an ogee cap with a gold bead, a raised band, and the floor line.
+  const py = shelfTops[shelfTops.length - 1] + SURFACE + BOARD;
+  wood(ctx, ox - 8, py, ow + 16, PLINTH, C.wood, 'h');
+  vgrad(ctx, ox - 8, py, ow + 16, PLINTH, [[0, 'rgba(0,0,0,0.55)'], [0.1, 'rgba(255,215,170,0.12)'], [0.21, 'rgba(0,0,0,0.3)'], [0.22, GOLD], [0.25, GOLD_LO], [0.26, 'rgba(0,0,0,0.25)'], [0.33, 'rgba(0,0,0,0)'], [0.4, 'rgba(0,0,0,0)'], [0.41, 'rgba(255,215,170,0.15)'], [0.43, 'rgba(0,0,0,0)'], [0.84, 'rgba(0,0,0,0)'], [0.85, 'rgba(0,0,0,0.45)'], [1, 'rgba(0,0,0,0.6)']]);
+
+  // Cornice: a projecting cap, a cove, a dentil course, a gold bead.
+  const cx0 = ox - OVER, cw = ow + OVER * 2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = C.wood; ctx.fillRect(cx0, top0, cw, CORNICE);
+  ctx.restore();
+  wood(ctx, cx0, top0, cw, CORNICE, C.wood, 'h');
+  const H_ = CORNICE;
+  vgrad(ctx, cx0, top0, cw, H_ * 0.18, [[0, C.hi], [0.75, C.wood], [1, C.lo]]);
+  vgrad(ctx, cx0 + 4, top0 + H_ * 0.18, cw - 8, H_ * 0.28, [[0, '#1f110a'], [1, C.hi]]);
+  const dy = top0 + H_ * 0.48, dh = H_ * 0.22;
+  ctx.fillStyle = '#1a0e07'; ctx.fillRect(cx0 + 8, dy, cw - 16, dh);
+  for (let x = cx0 + 10; x < cx0 + cw - 20; x += 22) {
+    vgrad(ctx, x, dy, 14, dh, [[0, C.hi], [1, C.wood]]);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 12, dy, 2, dh);
+  }
+  ctx.fillStyle = GOLD; ctx.fillRect(cx0 + 4, top0 + H_ * 0.74, cw - 8, H_ * 0.03);
+  ctx.fillStyle = GOLD_LO; ctx.fillRect(cx0 + 4, top0 + H_ * 0.77, cw - 8, H_ * 0.02);
+  vgrad(ctx, cx0 + 6, top0 + H_ * 0.79, cw - 12, H_ * 0.21, [[0, C.hi], [1, C.lo]]);
+
+  // Books and decorations, standing on the front half of each surface.
+  L.rows.forEach((row, i) => {
+    const y = y0 + BOARD + rowH * i + HEAD;
+    for (const it of placeRow(books, row, L, inner.x, inner.w, y, gap)) {
+      if (it.b.decor) { drawDecor(ctx, it.b, it.x, it.y, it.w, it.h, p, true); continue; }
+      drawStanding(ctx, it.b.img, it.x, it.y, it.w, it.h, true);
     }
   });
 }
