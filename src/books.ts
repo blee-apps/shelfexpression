@@ -57,10 +57,12 @@ export const RAW_BOOKS: RawBook[] = RAW_ITEMS.filter(b => !isDecor(b));
 
 // Billy (IKEA's classic bookcase) shares the Vitsoe layout: books stand on
 // shelves, only the furniture around them changes.
-export type ShelfStyle = 'minimal' | 'vitsoe' | 'billy';
+export type ShelfStyle = 'minimal' | 'vitsoe' | 'billy' | 'athenaeum';
 const shelfSetting = (content as { shelf?: string }).shelf;
-export const SHELF_STYLE: ShelfStyle = shelfSetting === 'billy' ? 'billy' : content.useVitsoeShelf ? 'vitsoe' : 'minimal';
+export const SHELF_STYLE: ShelfStyle = shelfSetting === 'billy' ? 'billy' : shelfSetting === 'athenaeum' ? 'athenaeum' : content.useVitsoeShelf ? 'vitsoe' : 'minimal';
 export const USE_VITSOE_SHELF: boolean = SHELF_STYLE !== 'minimal';
+// Billy and Athenaeum are bookcases with bays: books stand in pairs, a size smaller.
+export const BAY_SHELF: boolean = SHELF_STYLE === 'billy' || SHELF_STYLE === 'athenaeum';
 
 // Worn covers: off, light, or heavy (Well-loved).
 const wearSetting = (content as { wear?: string }).wear;

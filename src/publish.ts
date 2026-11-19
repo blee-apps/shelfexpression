@@ -115,7 +115,7 @@ export function describeChanges(before: Shelf, after: Shelf): { summary: string;
   if (added.length) details.unshift(`Added ${quote(added)}`);
   if (removed.length) details.splice(added.length ? 1 : 0, 0, `Removed ${quote(removed)}`);
   if (reordered) details.push('Changed the order');
-  const shelfName = (x: Shelf) => x.shelf === 'billy' ? 'Billy' : x.useVitsoeShelf ? 'Vitsoe' : 'Minimal';
+  const shelfName = (x: Shelf) => x.shelf === 'billy' ? 'Billy' : x.shelf === 'athenaeum' ? 'Athenaeum' : x.useVitsoeShelf ? 'Vitsoe' : 'Minimal';
   const shelfChanged = shelfName(before) !== shelfName(after);
   if (shelfChanged) details.push(`Shelf: ${shelfName(after)}`);
   const modeBefore = before.colorMode || 'light', modeAfter = after.colorMode || 'light';
@@ -163,7 +163,7 @@ export const canonicalShelf = (json: string) => {
       if (b.coverUrl) e.coverUrl = b.coverUrl;
       return e;
     });
-    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, shelf: d.shelf === 'billy' ? 'billy' : null, colorMode: d.colorMode || 'light', wear: d.wear === 'light' || d.wear === 'heavy' ? d.wear : 'off', books, footer: d.share?.footer ?? null });
+    return JSON.stringify({ useVitsoeShelf: d.useVitsoeShelf !== false, shelf: d.shelf === 'billy' || d.shelf === 'athenaeum' ? d.shelf : null, colorMode: d.colorMode || 'light', wear: d.wear === 'light' || d.wear === 'heavy' ? d.wear : 'off', books, footer: d.share?.footer ?? null });
   } catch { return json; }
 };
 const normalize = canonicalShelf;

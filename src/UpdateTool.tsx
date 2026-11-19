@@ -227,7 +227,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
   // Picks up settings saved alongside the books.
   const applyMeta = (data: any) => {
     if (data && !Array.isArray(data)) {
-      if (data.shelf === 'billy') setShelfStyle('billy');
+      if (data.shelf === 'billy' || data.shelf === 'athenaeum') setShelfStyle(data.shelf);
       else if (typeof data.useVitsoeShelf === 'boolean') setShelfStyle(data.useVitsoeShelf ? 'vitsoe' : 'minimal');
       setColorMode(data.colorMode === 'dark' || data.colorMode === 'auto' ? data.colorMode : 'light');
       setWear(isWear(data.wear) ? data.wear : 'off');
@@ -848,7 +848,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
       return entry;
     });
     // useVitsoeShelf stays for older builds; Billy is a Vitsoe-style layout.
-    const data: Record<string, unknown> = { useVitsoeShelf, ...(shelfStyle === 'billy' ? { shelf: 'billy' } : {}), colorMode, books };
+    const data: Record<string, unknown> = { useVitsoeShelf, ...(shelfStyle === 'billy' || shelfStyle === 'athenaeum' ? { shelf: shelfStyle } : {}), colorMode, books };
     if (wear !== 'off') data.wear = wear;
     if (sortOrder !== 'manual') data.sort = sortOrder;
     if (shareFooter !== undefined) data.share = { footer: shareFooter };
@@ -1484,7 +1484,7 @@ export default function UpdateTool({ onClose, books, onForgetKey, guest = false 
         {/* LOOK: shelf style and light/dark, published with the books */}
         <div className="admin-look" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px', alignItems: 'center', justifyContent: 'center', margin: '0 0 22px' }}>
           <LookSwitch label="Shelf" value={shelfStyle} onChange={v => setShelfStyle(v as ShelfStyle)}
-            items={[{ value: 'minimal', label: 'Minimal' }, { value: 'vitsoe', label: 'Vitsoe' }, { value: 'billy', label: 'Billy' }]} />
+            items={[{ value: 'minimal', label: 'Minimal' }, { value: 'vitsoe', label: 'Vitsoe' }, { value: 'billy', label: 'Billy' }, { value: 'athenaeum', label: 'Athenaeum' }]} />
           <LookSwitch label="Mode" value={colorMode} onChange={v => setColorMode(v as ColorMode)}
             items={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'auto', label: 'Auto' }]}
             title="Auto follows each visitor's device setting" />
