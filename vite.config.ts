@@ -87,7 +87,7 @@ const readBody = (req: IncomingMessage, max = 5 * 1024 * 1024) => new Promise<st
   req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
   req.on('error', fail);
 });
-const MIME: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', svg: 'image/svg+xml', woff2: 'font/woff2', woff: 'font/woff', png: 'image/png', jpg: 'image/jpeg', ico: 'image/x-icon', txt: 'text/plain' };
+const MIME: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', svg: 'image/svg+xml', woff2: 'font/woff2', woff: 'font/woff', png: 'image/png', jpg: 'image/jpeg', ico: 'image/x-icon', webmanifest: 'application/manifest+json', txt: 'text/plain' };
 const exportPlugin = {
   name: 'local-export',
   apply: 'serve' as const,
